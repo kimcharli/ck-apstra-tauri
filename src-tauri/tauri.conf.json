@@ -43,7 +43,11 @@
         "depends": []
       },
       "externalBin": [],
-      "icon": [],
+      "icon": [
+        "icons/apstra.icns",
+        "icons/icon.png",
+        "icons/apstra.ico"
+      ],
       "identifier": "com.apstra.network-config-tool",
       "longDescription": "A Tauri-based desktop application for processing Excel spreadsheets containing network configuration data and performing automated actions on Apstra network infrastructure.",
       "macOS": {
