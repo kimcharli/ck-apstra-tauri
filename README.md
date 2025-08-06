@@ -4,16 +4,17 @@ A Tauri-based desktop application for processing Excel spreadsheets containing n
 
 ## Project Status
 
-🚧 **Under Development** - This project is currently in the initial setup phase.
+✅ **Functional Application** - Core features implemented with Excel conversion mapping system.
 
 ## Overview
 
 This application provides a streamlined workflow for:
-- Excel file upload and sheet selection
-- Network configuration data parsing and validation
-- Interactive data visualization with sorting and filtering
-- Automated network configuration actions
-- Real-time progress tracking and comprehensive error handling
+- Excel file upload with drag-and-drop or file picker support
+- Flexible conversion mapping system for diverse Excel header formats
+- Sheet selection and intelligent data parsing with validation
+- Interactive data visualization in sortable tables
+- User-customizable field mappings with persistent configuration
+- Real-time data processing with comprehensive error handling
 
 ## Technology Stack
 
@@ -51,35 +52,90 @@ cd src-tauri && cargo build
 
 ```bash
 # Start development server
-npm run tauri dev
+npm run tauri:dev
+
+# Start with debug logging
+RUST_LOG=debug npm run tauri:dev
 ```
 
 ### Build
 
 ```bash
 # Build for production
-npm run tauri build
+npm run tauri:build
 ```
 
 ## Features
 
-### Phase 1 (Current)
-- [x] Project structure and basic setup
-- [ ] File upload functionality
-- [ ] Excel parsing foundation
-- [ ] Basic UI components
+### ✅ Core Implementation (Completed)
+- [x] Complete Tauri application setup with React frontend and Rust backend
+- [x] Excel file upload with Tauri file dialog integration
+- [x] Advanced sheet selection interface with real-time data preview
+- [x] Flexible conversion mapping system with default configurations
+- [x] User-customizable header mappings with persistent storage
+- [x] Intelligent Excel parsing with fallback logic
+- [x] Interactive data table with sorting and filtering capabilities
+- [x] Real-time conversion map updates that immediately reprocess data
+- [x] Comprehensive error handling and user feedback
 
-### Phase 2 (Planned)
-- [ ] Sheet selection interface
-- [ ] Data validation engine
-- [ ] Temporary file management
-- [ ] Progress tracking foundation
+### 🎯 Key Features
+**Conversion Mapping System:**
+- Default mappings embedded from related project configurations
+- User interface for customizing Excel header to field mappings
+- Load/save custom mapping configurations to files
+- Import/export mapping files for sharing between users
+- Real-time preview of header mappings and field conversions
 
-### Phase 3 (Future)
-- [ ] Interactive sortable table
-- [ ] Action processing engine
-- [ ] Real-time progress updates
-- [ ] Export capabilities
+**Excel Processing:**
+- Support for .xlsx files with automatic sheet detection
+- Configurable header row location (default: row 2)
+- Intelligent field detection with multiple header name variations
+- Data validation with duplicate detection and error reporting
+- Graceful handling of missing or malformed data
+
+### 🚀 Planned Enhancements
+- [ ] Action processing engine for network configuration deployment
+- [ ] Real-time progress tracking for bulk operations
+- [ ] Advanced data export capabilities (CSV, JSON)
+- [ ] Batch file processing queues
+- [ ] Integration with Apstra API for direct network configuration
+
+## Quick Start Guide
+
+### Using the Application
+
+1. **Start the Application**:
+   ```bash
+   npm run tauri:dev
+   ```
+
+2. **Upload Excel File**:
+   - Click "Choose File" or drag and drop an .xlsx file
+   - Application will automatically detect available sheets
+
+3. **Select Sheet**:
+   - Choose the sheet containing your network configuration data
+   - Data will be automatically parsed and displayed
+
+4. **Customize Conversion Mappings** (Optional):
+   - Click "Manage Conversion Map" button
+   - Add, edit, or remove header-to-field mappings
+   - Save custom configurations or load existing ones
+   - Changes apply immediately to current data
+
+5. **Review Data**:
+   - Inspect parsed data in the interactive table
+   - Sort and filter as needed
+   - Verify field mappings are correct
+
+### Supported Excel Formats
+
+The application works with Excel files containing network configuration data. Default mappings support headers like:
+- "Switch Name" → switch_label
+- "Port" → switch_ifname  
+- "Host Name" → server_label
+- "Speed (GB)" → link_speed
+- And many more...
 
 ## Documentation
 
