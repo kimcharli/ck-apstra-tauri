@@ -52,31 +52,16 @@ const FileUpload: React.FC<FileUploadProps> = ({ onSheetsLoaded }) => {
   };
 
   return (
-    <div className="file-upload">
-      <h2>Upload Excel File</h2>
-      <div className="upload-zone">
-        {selectedFile ? (
-          <div>
-            <p>Selected: {selectedFile.split('/').pop()}</p>
-            <button onClick={handleFileSelect} disabled={isLoading}>
-              Select Different File
-            </button>
-          </div>
-        ) : (
-          <div>
-            <p>Click to select your .xlsx file</p>
-            <button onClick={handleFileSelect} disabled={isLoading}>
-              {isLoading ? 'Processing...' : 'Browse Files'}
-            </button>
-          </div>
-        )}
-        
-        {error && (
-          <div style={{ color: 'red', marginTop: '1rem' }}>
-            <p>Error: {error}</p>
-          </div>
-        )}
-      </div>
+    <div className="file-upload-compact">
+      <button onClick={handleFileSelect} disabled={isLoading} className="file-select-btn">
+        {isLoading ? 'Processing...' : 'Choose File'}
+      </button>
+      
+      {error && (
+        <div className="error-message">
+          Error: {error}
+        </div>
+      )}
     </div>
   );
 };

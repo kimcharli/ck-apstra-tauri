@@ -4,7 +4,7 @@ A Tauri-based desktop application for processing Excel spreadsheets containing n
 
 ## Project Status
 
-✅ **Functional Application** - Core features implemented with Excel conversion mapping system.
+✅ **Production-Ready Application** - Complete application with all core features, Tools page, and comprehensive logging system implemented.
 
 ## Overview
 
@@ -15,6 +15,9 @@ This application provides a streamlined workflow for:
 - Interactive data visualization in sortable tables
 - User-customizable field mappings with persistent configuration
 - Real-time data processing with comprehensive error handling
+- Apstra connection management with blueprint integration
+- System and IP search tools for network infrastructure
+- Comprehensive logging with post-mortem analysis capabilities
 
 ## Technology Stack
 
@@ -77,6 +80,13 @@ npm run tauri:build
 - [x] Interactive data table with sorting and filtering capabilities
 - [x] Real-time conversion map updates that immediately reprocess data
 - [x] Comprehensive error handling and user feedback
+- [x] Apstra connection configuration with connection testing
+- [x] Network provisioning workflow with data validation
+- [x] Tools page with system/IP search and blueprint management
+- [x] Shared navigation header across all application pages
+- [x] Comprehensive logging system with post-mortem analysis
+- [x] Cross-platform native applications (macOS, Windows, Linux)
+- [x] Professional branding with custom icons and responsive design
 
 ### 🎯 Key Features
 **Conversion Mapping System:**
@@ -93,12 +103,31 @@ npm run tauri:build
 - Data validation with duplicate detection and error reporting
 - Graceful handling of missing or malformed data
 
-### 🚀 Planned Enhancements
-- [ ] Action processing engine for network configuration deployment
+**Apstra Integration:**
+- Connection configuration with host, port, and blueprint settings
+- Connection testing with visual status indicators
+- Blueprint device validation and matching
+- Network provisioning workflow with data verification
+
+**Tools and Search:**
+- System search by device name across blueprints
+- IP address/CIDR search with blueprint filtering
+- Blueprint management with Leafs and Dump operations
+- Comprehensive search result handling
+
+**Logging and Analysis:**
+- Complete audit trail of all user interactions
+- Button clicks, workflow progression, and data changes tracked
+- Multiple export formats (TXT, JSON, CSV) with timestamps
+- Session-based logging with privacy protection
+- Post-mortem analysis capabilities for debugging and optimization
+
+### 🚀 Future Enhancements
+- [ ] Direct Apstra API integration for automated provisioning
 - [ ] Real-time progress tracking for bulk operations
-- [ ] Advanced data export capabilities (CSV, JSON)
-- [ ] Batch file processing queues
-- [ ] Integration with Apstra API for direct network configuration
+- [ ] Advanced data export capabilities with custom templates
+- [ ] Batch file processing queues for multiple Excel files
+- [ ] Historical provisioning records and rollback capabilities
 
 ## Quick Start Guide
 
@@ -107,26 +136,39 @@ npm run tauri:build
 1. **Start the Application**:
    ```bash
    npm run tauri:dev
+   # Or for production build
+   npm run tauri:build
    ```
 
-2. **Upload Excel File**:
-   - Click "Choose File" or drag and drop an .xlsx file
-   - Application will automatically detect available sheets
+2. **Configure Apstra Connection** (Step 1):
+   - Click "1. Apstra Connection" in the header or dashboard
+   - Enter Apstra controller host, port, and credentials
+   - Specify blueprint name for provisioning
+   - Test connection to verify settings
 
-3. **Select Sheet**:
-   - Choose the sheet containing your network configuration data
-   - Data will be automatically parsed and displayed
-
-4. **Customize Conversion Mappings** (Optional):
-   - Click "Manage Conversion Map" button
+3. **Customize Conversion Mappings** (Step 2):
+   - Click "2. Conversion Map" to customize Excel header mappings
+   - Load default mappings or import custom configuration
    - Add, edit, or remove header-to-field mappings
-   - Save custom configurations or load existing ones
-   - Changes apply immediately to current data
+   - Save custom configurations for reuse
 
-5. **Review Data**:
-   - Inspect parsed data in the interactive table
-   - Sort and filter as needed
-   - Verify field mappings are correct
+4. **Provision Network Configuration** (Step 3):
+   - Click "3. Provisioning" to start the provisioning workflow
+   - Upload Excel file with network configuration data
+   - Select sheet containing the data to process
+   - Review parsed data in the interactive table
+   - Execute provisioning after validation
+
+5. **Use Search Tools** (Step 4):
+   - Click "4. Tools" for system and IP search capabilities
+   - Search for specific systems by name across blueprints
+   - Find IP addresses or CIDR ranges in network configurations
+   - Manage blueprint operations (Leafs, Dump)
+
+6. **Download Session Logs**:
+   - Click the 📥 button in the navigation header
+   - Choose format (TXT, JSON, CSV) for log export
+   - Use logs for troubleshooting and post-mortem analysis
 
 ### Supported Excel Formats
 

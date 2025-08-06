@@ -1,63 +1,19 @@
-.apstra-config-overlay {
+/* Full-screen apstra config page */
+.apstra-config-page {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.apstra-config-modal {
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-  width: 90%;
-  max-width: 700px;
-  max-height: 90vh;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.apstra-config-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e0e0e0;
-  background-color: #f8f9fa;
-  border-radius: 12px 12px 0 0;
-}
-
-.apstra-config-header h2 {
-  margin: 0;
-  color: #333;
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.close-button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: #666;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-}
-
-.close-button:hover {
-  background-color: #e0e0e0;
+  z-index: 1000;
 }
 
 .apstra-config-content {
   padding: 24px;
-  flex-grow: 1;
+  max-width: 700px;
+  margin: 0 auto;
 }
 
 .loading-message {

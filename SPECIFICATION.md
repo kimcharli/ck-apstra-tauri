@@ -10,6 +10,7 @@ A Tauri-based desktop application for processing Excel spreadsheets containing n
 - Provide intuitive Excel-to-network-action pipeline
 - Ensure data validation and error handling throughout the process
 - Support real-time progress tracking and comprehensive reporting
+- Provide comprehensive logging and post-mortem analysis capabilities
 
 ### Scope
 Phase-based development of a cross-platform desktop application with web technologies frontend and Rust backend for robust file processing and system integration.
@@ -274,7 +275,96 @@ The conversion mapping system provides flexible translation between Excel header
 - Secure memory handling
 - Audit logging for compliance
 
-## 5. Implementation Phases
+### 4.6 Logging and Post-Mortem Analysis System
+
+#### Comprehensive Logging Service
+The application includes a comprehensive logging system for complete post-mortem analysis and debugging capabilities:
+
+**Logging Categories**:
+- NAVIGATION - Page and workflow transitions
+- BUTTON_CLICK - All user interactions with buttons and controls
+- WORKFLOW - Step-by-step workflow progress tracking
+- DATA_CHANGE - Configuration and data modifications
+- API_CALL - External service communications
+- ERROR - System errors and failures
+- SYSTEM - Application lifecycle and system events
+
+**Logging Levels**: INFO, WARN, ERROR, DEBUG
+
+#### Session Management
+- Unique session IDs for tracking user sessions
+- Session lifecycle logging (startup/shutdown)
+- Cross-component session correlation
+
+#### Log Export Functionality
+**Multiple Export Formats**:
+- **Text Format**: Human-readable logs with timestamps and details
+- **JSON Format**: Structured data for programmatic analysis
+- **CSV Format**: Spreadsheet-compatible for data analysis
+
+**Export Features**:
+- Timestamped filenames (e.g., `apstra-logs-2024-01-15T14-30-25.txt`)
+- File format auto-detection based on extension
+- Log filtering by category, level, and time range
+- Statistical summaries included in exports
+
+#### User Interface Integration
+- **Log Download Button**: 📥 icon in navigation header
+- **Visual Feedback**: Spinning animation during download
+- **Context-Aware Logging**: Captures button location, workflow state
+- **Error Correlation**: Links user actions to system responses
+
+#### Data Captured for Post-Mortem
+- Complete audit trail of user interactions
+- Workflow progression with timing information
+- Configuration changes with before/after values
+- Error conditions with full context
+- File operations and data processing results
+- System performance and connection health
+
+#### Privacy and Security
+- Password redaction in configuration logs
+- Session isolation for multi-user environments
+- Local storage only (no remote logging)
+- User-controlled export functionality
+
+## 5. Current Implementation Status (Updated 2024-01-15)
+
+### Completed Features
+- **Phase 1-3**: All core functionality implemented and operational
+- **Excel Processing**: Full Excel file upload, sheet selection, and data parsing
+- **Conversion Mapping**: User-customizable field mapping with default configurations
+- **Apstra Connection**: Configuration management with connection testing
+- **Network Provisioning**: Complete workflow with data validation and table display
+- **Tools Page**: System search, IP search, and blueprint management interfaces
+- **Navigation**: Shared navigation header across all pages with workflow integration
+- **Logging System**: Comprehensive post-mortem analysis with multiple export formats
+- **Cross-Platform**: Native desktop applications for macOS, Windows, and Linux
+- **Professional UI**: Responsive design with modern styling and user experience
+
+### Key Architectural Decisions Implemented
+- Tauri framework with React frontend and Rust backend
+- Two-phase processing pattern (validation → execution)
+- Modular component architecture with shared services
+- Defensive programming patterns with comprehensive error handling
+- Local-first approach with no remote data persistence
+- Session-based logging with privacy-conscious data handling
+
+### Current Application Workflow
+1. **Apstra Connection**: Configure controller connection and blueprint settings
+2. **Conversion Map**: Customize Excel header mapping for data processing
+3. **Provisioning**: Upload Excel, select sheets, validate data, and execute provisioning
+4. **Tools**: Search systems/IPs and manage blueprint operations
+
+### Technical Achievements
+- Intelligent Excel header mapping with line break normalization
+- Real-time data validation and blueprint device matching
+- Comprehensive audit logging with post-mortem analysis capabilities
+- Professional branding with custom icon sets for all platforms
+- Responsive design supporting desktop, tablet, and mobile interfaces
+- Error recovery mechanisms with detailed user feedback
+
+## 6. Implementation Phases
 
 ### Phase 1: Foundation (Weeks 1-2)
 - **Deliverables**:

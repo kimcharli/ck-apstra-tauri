@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open, save } from '@tauri-apps/api/dialog';
 import { ApstraConfig, ApstraConfigUIState } from '../../types';
+import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import './ApstraConfigManager.css';
 
 interface ApstraConfigManagerProps {
@@ -9,13 +10,15 @@ interface ApstraConfigManagerProps {
   onClose: () => void;
   onConfigChange?: (config: ApstraConfig) => void;
   currentConfig?: ApstraConfig | null;
+  onNavigate?: (page: 'home' | 'apstra-connection' | 'conversion-map' | 'provisioning' | 'tools') => void;
 }
 
 const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   isVisible,
   onClose,
   onConfigChange,
-  currentConfig
+  currentConfig,
+  onNavigate
 }) => {
   const [state, setState] = useState<ApstraConfigUIState>({
     isLoading: false,
@@ -223,14 +226,14 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   if (!isVisible) return null;
 
   return (
-    <div className="apstra-config-overlay">
-      <div className="apstra-config-modal">
-        <div className="apstra-config-header">
-          <h2>Apstra Connection</h2>
-          <button className="close-button" onClick={onClose}>×</button>
-        </div>
-
-        <div className="apstra-config-content">
+    <div className="apstra-config-page">
+      <NavigationHeader
+        currentPage="apstra-connection"
+        onNavigate={onNavigate || (() => {})}
+        title="Apstra Connection Manager"
+      />
+      
+      <div className="apstra-config-content">
           {state.isLoading ? (
             <div className="loading-message">Loading configuration...</div>
           ) : (
@@ -392,7 +395,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
               Apply Configuration
             </button>
           </div>
-        </div>
       </div>
     </div>
   );

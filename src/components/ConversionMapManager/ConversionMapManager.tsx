@@ -2,18 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open, save } from '@tauri-apps/api/dialog';
 import { ConversionMap, HeaderMapping } from '../../types';
+import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import './ConversionMapManager.css';
 
 interface ConversionMapManagerProps {
   onConversionMapChange?: (map: ConversionMap) => void;
   isVisible?: boolean;
   onClose?: () => void;
+  onNavigate?: (page: 'home' | 'apstra-connection' | 'conversion-map' | 'provisioning' | 'tools') => void;
 }
 
 const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({ 
   onConversionMapChange, 
   isVisible = false,
-  onClose 
+  onClose,
+  onNavigate
 }) => {
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
   const [headerRow, setHeaderRow] = useState<number>(1);
@@ -214,14 +217,14 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
   if (!isVisible) return null;
 
   return (
-    <div className="conversion-map-overlay">
-      <div className="conversion-map-modal">
-        <div className="modal-header">
-          <h2>Conversion Map Manager</h2>
-          <button onClick={onClose} className="close-button">×</button>
-        </div>
-        
-        <div className="modal-content">
+    <div className="conversion-map-page">
+      <NavigationHeader
+        currentPage="conversion-map"
+        onNavigate={onNavigate || (() => {})}
+        title="Conversion Map Manager"
+      />
+      
+      <div className="conversion-map-content">
           {error && (
             <div className="error-message">
               <p>Error: {error}</p>
@@ -319,7 +322,6 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
               ))}
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
