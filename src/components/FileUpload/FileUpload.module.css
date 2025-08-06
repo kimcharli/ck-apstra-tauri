@@ -1,0 +1,16 @@
+.file-upload {
+  padding: 2rem;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.upload-zone {
+  padding: 2rem;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.upload-zone:hover {
+  background: #f0f0f0;
+}
