@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { NetworkConfigRow, ConversionMap } from './types';
+import { NetworkConfigRow, ConversionMap, ApstraConfig } from './types';
 import FileUpload from './components/FileUpload/FileUpload';
 import SheetSelector from './components/SheetSelector/SheetSelector';
 import DataTable from './components/DataTable/DataTable';
 import ActionPanel from './components/ActionPanel/ActionPanel';
 import ProgressTracker from './components/ProgressTracker/ProgressTracker';
 import ConversionMapManager from './components/ConversionMapManager/ConversionMapManager';
+import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigManager';
 
 function App() {
   const [greetMsg, setGreetMsg] = useState('');
@@ -22,6 +23,10 @@ function App() {
   // Conversion map state
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
   const [showConversionManager, setShowConversionManager] = useState(false);
+  
+  // Apstra configuration state
+  const [apstraConfig, setApstraConfig] = useState<ApstraConfig | null>(null);
+  const [showApstraConfigManager, setShowApstraConfigManager] = useState(false);
 
   async function greet() {
     try {
@@ -74,17 +79,30 @@ function App() {
     }
   };
 
+  const handleApstraConfigChange = (newConfig: ApstraConfig) => {
+    setApstraConfig(newConfig);
+    console.log('App: Apstra config updated:', newConfig);
+  };
+
   return (
     <div className="app">
       <header className="app-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Apstra Network Configuration Tool</h1>
-          <button 
-            onClick={() => setShowConversionManager(true)}
-            style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-          >
-            Manage Conversion Map
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={() => setShowApstraConfigManager(true)}
+              style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Apstra Configuration
+            </button>
+            <button 
+              onClick={() => setShowConversionManager(true)}
+              style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Manage Conversion Map
+            </button>
+          </div>
         </div>
         
         {/* Tauri Connection Test */}
@@ -136,6 +154,13 @@ function App() {
         isVisible={showConversionManager}
         onClose={() => setShowConversionManager(false)}
         onConversionMapChange={handleConversionMapChange}
+      />
+      
+      <ApstraConfigManager
+        isVisible={showApstraConfigManager}
+        onClose={() => setShowApstraConfigManager(false)}
+        onConfigChange={handleApstraConfigChange}
+        currentConfig={apstraConfig}
       />
     </div>
   );

@@ -36,7 +36,14 @@ fn main() {
             convert_headers_with_map,
             update_conversion_mapping,
             remove_conversion_mapping,
-            set_header_row
+            set_header_row,
+            load_default_apstra_config,
+            load_apstra_config_from_file,
+            save_apstra_config_to_file,
+            save_user_apstra_config,
+            load_user_apstra_config,
+            test_apstra_connection,
+            get_apstra_config_with_defaults
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

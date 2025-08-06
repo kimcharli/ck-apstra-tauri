@@ -1,0 +1,10 @@
+{
+  "host": "10.85.192.59",
+  "port": 443,
+  "username": "admin",
+  "password": "",
+  "blueprint_name": "terra",
+  "use_ssl": true,
+  "verify_ssl": false,
+  "timeout": 30
+}
