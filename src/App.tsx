@@ -42,7 +42,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h1>Apstra Network Configuration Tool</h1>
+          <h1>Apstra Provisioning Tool</h1>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button 
               onClick={() => setShowProvisioningPage(true)}
@@ -54,7 +54,7 @@ function App() {
               onClick={() => setShowApstraConfigManager(true)}
               style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
             >
-              Apstra Configuration
+              Apstra Connection
             </button>
             <button 
               onClick={() => setShowConversionManager(true)}
@@ -85,22 +85,22 @@ function App() {
       
       <main className="app-main">
         <section className="welcome-section" style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#f8f9fa', borderRadius: '12px', margin: '20px 0' }}>
-          <h2 style={{ color: '#333', marginBottom: '20px' }}>Welcome to Apstra Network Configuration Tool</h2>
+          <h2 style={{ color: '#333', marginBottom: '20px' }}>Welcome to Apstra Provisioning Tool</h2>
           <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '30px', lineHeight: '1.6' }}>
             Streamline your network provisioning workflow with intelligent Excel processing and automated Apstra integration.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
             <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
-              <h3 style={{ color: '#dc3545', marginBottom: '10px' }}>1. Start Provisioning</h3>
-              <p style={{ color: '#666', fontSize: '0.9rem' }}>Upload Excel files, map data, and provision network configurations</p>
-            </div>
-            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
-              <h3 style={{ color: '#28a745', marginBottom: '10px' }}>2. Configure Apstra</h3>
+              <h3 style={{ color: '#28a745', marginBottom: '10px' }}>1. Apstra Connection</h3>
               <p style={{ color: '#666', fontSize: '0.9rem' }}>Set up connection to your Apstra controller and blueprint</p>
             </div>
             <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
-              <h3 style={{ color: '#007bff', marginBottom: '10px' }}>3. Map Data Fields</h3>
+              <h3 style={{ color: '#007bff', marginBottom: '10px' }}>2. Conversion Map</h3>
               <p style={{ color: '#666', fontSize: '0.9rem' }}>Customize Excel header mapping for accurate data processing</p>
+            </div>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
+              <h3 style={{ color: '#dc3545', marginBottom: '10px' }}>3. Provision</h3>
+              <p style={{ color: '#666', fontSize: '0.9rem' }}>Upload Excel files, map data, and provision network configurations</p>
             </div>
           </div>
         </section>

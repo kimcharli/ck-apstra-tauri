@@ -1,7 +1,7 @@
 [package]
 name = "ck-apstra-tauri"
 version = "0.1.0"
-description = "Tauri-based Excel processing tool for Apstra network configuration"
+description = "Tauri-based Excel processing tool for Apstra network provisioning"
 authors = ["Claude Code Assistant"]
 license = "MIT"
 repository = ""

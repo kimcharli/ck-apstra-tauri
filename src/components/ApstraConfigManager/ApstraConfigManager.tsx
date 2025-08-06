@@ -226,7 +226,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     <div className="apstra-config-overlay">
       <div className="apstra-config-modal">
         <div className="apstra-config-header">
-          <h2>Apstra Configuration</h2>
+          <h2>Apstra Connection</h2>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
 
