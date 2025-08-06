@@ -1,32 +1,22 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { NetworkConfigRow, ConversionMap, ApstraConfig } from './types';
-import FileUpload from './components/FileUpload/FileUpload';
-import SheetSelector from './components/SheetSelector/SheetSelector';
-import DataTable from './components/DataTable/DataTable';
-import ActionPanel from './components/ActionPanel/ActionPanel';
-import ProgressTracker from './components/ProgressTracker/ProgressTracker';
+import { ConversionMap, ApstraConfig } from './types';
 import ConversionMapManager from './components/ConversionMapManager/ConversionMapManager';
 import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigManager';
+import ProvisioningPage from './components/ProvisioningPage/ProvisioningPage';
 
 function App() {
   const [greetMsg, setGreetMsg] = useState('');
   const [name, setName] = useState('');
   
-  // Excel processing state
-  const [sheets, setSheets] = useState<string[]>([]);
-  const [filePath, setFilePath] = useState<string>('');
-  const [selectedSheet, setSelectedSheet] = useState<string>('');
-  const [tableData, setTableData] = useState<NetworkConfigRow[]>([]);
-  const [isLoadingData, setIsLoadingData] = useState(false);
-  
-  // Conversion map state
+  // Configuration states
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
-  const [showConversionManager, setShowConversionManager] = useState(false);
-  
-  // Apstra configuration state
   const [apstraConfig, setApstraConfig] = useState<ApstraConfig | null>(null);
+  
+  // UI state management
+  const [showConversionManager, setShowConversionManager] = useState(false);
   const [showApstraConfigManager, setShowApstraConfigManager] = useState(false);
+  const [showProvisioningPage, setShowProvisioningPage] = useState(false);
 
   async function greet() {
     try {
@@ -38,45 +28,9 @@ function App() {
     }
   }
 
-  const handleSheetsLoaded = (loadedSheets: string[], loadedFilePath: string) => {
-    setSheets(loadedSheets);
-    setFilePath(loadedFilePath);
-    setSelectedSheet(''); // Reset sheet selection
-    setTableData([]); // Clear previous data
-    console.log('App: Sheets loaded:', loadedSheets);
-  };
-
-  const handleSheetSelect = async (sheetName: string) => {
-    setSelectedSheet(sheetName);
-    setIsLoadingData(true);
-    
-    try {
-      console.log('App: Parsing sheet:', sheetName, 'from file:', filePath);
-      console.log('App: Using conversion map:', conversionMap);
-      const parsedData = await invoke<NetworkConfigRow[]>('parse_excel_sheet', { 
-        filePath, 
-        sheetName,
-        conversionMap: conversionMap 
-      });
-      
-      console.log('App: Parsed data rows:', parsedData?.length || 0);
-      console.log('App: First few rows:', parsedData?.slice(0, 3));
-      setTableData(parsedData || []);
-    } catch (error) {
-      console.error('Failed to parse sheet data:', error);
-      setTableData([]);
-      // You could add error state handling here
-    } finally {
-      setIsLoadingData(false);
-    }
-  };
-
   const handleConversionMapChange = (newMap: ConversionMap) => {
     setConversionMap(newMap);
-    // Reparse current sheet if one is selected
-    if (selectedSheet && filePath) {
-      handleSheetSelect(selectedSheet);
-    }
+    console.log('App: Conversion map updated:', newMap);
   };
 
   const handleApstraConfigChange = (newConfig: ApstraConfig) => {
@@ -91,6 +45,12 @@ function App() {
           <h1>Apstra Network Configuration Tool</h1>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button 
+              onClick={() => setShowProvisioningPage(true)}
+              style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
+            >
+              Provisioning
+            </button>
+            <button 
               onClick={() => setShowApstraConfigManager(true)}
               style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
             >
@@ -100,7 +60,7 @@ function App() {
               onClick={() => setShowConversionManager(true)}
               style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
             >
-              Manage Conversion Map
+              Conversion Map
             </button>
           </div>
         </div>
@@ -124,29 +84,25 @@ function App() {
       </header>
       
       <main className="app-main">
-        <section className="upload-section">
-          <FileUpload onSheetsLoaded={handleSheetsLoaded} />
-        </section>
-        
-        <section className="sheet-selector-section">
-          <SheetSelector 
-            sheets={sheets}
-            filePath={filePath}
-            selectedSheet={selectedSheet}
-            onSheetSelect={handleSheetSelect}
-          />
-        </section>
-        
-        <section className="data-section">
-          <DataTable data={tableData} isLoading={isLoadingData} />
-        </section>
-        
-        <section className="action-section">
-          <ActionPanel />
-        </section>
-        
-        <section className="progress-section">
-          <ProgressTracker />
+        <section className="welcome-section" style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: '#f8f9fa', borderRadius: '12px', margin: '20px 0' }}>
+          <h2 style={{ color: '#333', marginBottom: '20px' }}>Welcome to Apstra Network Configuration Tool</h2>
+          <p style={{ color: '#666', fontSize: '1.1rem', marginBottom: '30px', lineHeight: '1.6' }}>
+            Streamline your network provisioning workflow with intelligent Excel processing and automated Apstra integration.
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
+              <h3 style={{ color: '#dc3545', marginBottom: '10px' }}>1. Start Provisioning</h3>
+              <p style={{ color: '#666', fontSize: '0.9rem' }}>Upload Excel files, map data, and provision network configurations</p>
+            </div>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
+              <h3 style={{ color: '#28a745', marginBottom: '10px' }}>2. Configure Apstra</h3>
+              <p style={{ color: '#666', fontSize: '0.9rem' }}>Set up connection to your Apstra controller and blueprint</p>
+            </div>
+            <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', border: '1px solid #e0e0e0', minWidth: '200px' }}>
+              <h3 style={{ color: '#007bff', marginBottom: '10px' }}>3. Map Data Fields</h3>
+              <p style={{ color: '#666', fontSize: '0.9rem' }}>Customize Excel header mapping for accurate data processing</p>
+            </div>
+          </div>
         </section>
       </main>
       
@@ -161,6 +117,13 @@ function App() {
         onClose={() => setShowApstraConfigManager(false)}
         onConfigChange={handleApstraConfigChange}
         currentConfig={apstraConfig}
+      />
+      
+      <ProvisioningPage
+        isVisible={showProvisioningPage}
+        onClose={() => setShowProvisioningPage(false)}
+        conversionMap={conversionMap}
+        apstraConfig={apstraConfig}
       />
     </div>
   );
