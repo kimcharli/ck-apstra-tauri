@@ -4,10 +4,9 @@ import { ConversionMap, ApstraConfig } from './types';
 import ConversionMapManager from './components/ConversionMapManager/ConversionMapManager';
 import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigManager';
 import ProvisioningPage from './components/ProvisioningPage/ProvisioningPage';
+import './App.css';
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState('');
-  const [name, setName] = useState('');
   
   // Configuration states
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
@@ -17,16 +16,25 @@ function App() {
   const [showConversionManager, setShowConversionManager] = useState(false);
   const [showApstraConfigManager, setShowApstraConfigManager] = useState(false);
   const [showProvisioningPage, setShowProvisioningPage] = useState(false);
+  
+  // Connection status state
+  const [isConnectionAlive, setIsConnectionAlive] = useState<boolean | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  async function greet() {
+  const testTauriConnection = async () => {
+    if (isTestingConnection) return;
+    
+    setIsTestingConnection(true);
     try {
-      const message = await invoke<string>('greet', { name });
-      setGreetMsg(message);
+      await invoke<string>('greet', { name: 'Connection Test' });
+      setIsConnectionAlive(true);
     } catch (error) {
-      console.error('Failed to greet:', error);
-      setGreetMsg('Failed to connect to Rust backend');
+      console.error('Tauri connection test failed:', error);
+      setIsConnectionAlive(false);
+    } finally {
+      setIsTestingConnection(false);
     }
-  }
+  };
 
   const handleConversionMapChange = (newMap: ConversionMap) => {
     setConversionMap(newMap);
@@ -43,7 +51,7 @@ function App() {
       <header className="app-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Apstra Provisioning Tool</h1>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
             <button 
               onClick={() => setShowApstraConfigManager(true)}
               style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
@@ -62,24 +70,33 @@ function App() {
             >
               3. Provisioning
             </button>
-          </div>
-        </div>
-        
-        {/* Tauri Connection Test */}
-        <div className="connection-test" style={{ margin: '1rem 0', padding: '1rem', border: '1px solid #ccc', borderRadius: '4px' }}>
-          <h3>Tauri Connection Test</h3>
-          <div>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your name"
-              style={{ marginRight: '0.5rem', padding: '0.25rem' }}
-            />
-            <button onClick={greet} style={{ padding: '0.25rem 0.5rem' }}>
-              Test Backend Connection
+            
+            {/* Tauri Connection Status Button */}
+            <button
+              onClick={testTauriConnection}
+              disabled={isTestingConnection}
+              title={isConnectionAlive === null ? 'Test Tauri Connection' : isConnectionAlive ? 'Tauri Connected' : 'Tauri Disconnected'}
+              className={isConnectionAlive === true ? 'connection-alive' : isTestingConnection ? 'connection-testing' : ''}
+              style={{
+                padding: '8px',
+                border: 'none',
+                borderRadius: '50%',
+                cursor: isTestingConnection ? 'not-allowed' : 'pointer',
+                backgroundColor: isTestingConnection ? '#ffc107' : isConnectionAlive === null ? '#6c757d' : isConnectionAlive ? '#28a745' : '#dc3545',
+                color: 'white',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '16px',
+                transition: 'all 0.3s',
+                boxShadow: isConnectionAlive === true ? '0 0 10px rgba(40, 167, 69, 0.5)' : isConnectionAlive === false ? '0 0 10px rgba(220, 53, 69, 0.5)' : 'none'
+              }}
+            >
+              {isTestingConnection ? '⟳' : isConnectionAlive === null ? '?' : isConnectionAlive ? '●' : '●'}
             </button>
           </div>
-          {greetMsg && <p style={{ marginTop: '0.5rem', color: greetMsg.includes('Failed') ? 'red' : 'green' }}>{greetMsg}</p>}
         </div>
       </header>
       
