@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { NetworkConfigRow, ConversionMap } from './types';
 import FileUpload from './components/FileUpload/FileUpload';
@@ -25,7 +25,7 @@ function App() {
 
   async function greet() {
     try {
-      const message = await invoke('greet', { name });
+      const message = await invoke<string>('greet', { name });
       setGreetMsg(message);
     } catch (error) {
       console.error('Failed to greet:', error);

@@ -23,6 +23,23 @@ The project follows a Tauri architecture pattern with:
 - Sortable table display with filtering capabilities
 - Automatic cleanup of temporary files after processing
 
+### Native Application Distribution
+The application can be built as native desktop applications:
+- **macOS**: `.app` bundle and `.dmg` installer
+- **Windows**: `.exe` and `.msi` installers (requires Windows build environment)
+- **Linux**: `.deb`, `.rpm`, and `.AppImage` packages (requires Linux build environment)
+
+**Build Commands**:
+```bash
+# Build for current platform
+npm run tauri build
+
+# Cross-platform builds require platform-specific environments
+# Use GitHub Actions for automated multi-platform builds
+```
+
+**Output Location**: `src-tauri/target/release/bundle/`
+
 ### Conversion Mapping System
 The application uses a flexible conversion mapping system to translate Excel headers to internal field names:
 
