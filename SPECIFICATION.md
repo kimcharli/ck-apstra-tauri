@@ -37,6 +37,24 @@ Phase-based development of a cross-platform desktop application with web technol
 Excel Upload → Temp Storage → Sheet Selection → Data Parsing → Validation → Table Display → Action Selection → Processing → Results
 ```
 
+#### 2.3 Two-Phase Processing Pattern
+Based on lessons from related projects, the system implements a proven two-phase approach:
+
+**Phase 1: Data Validation & Review**
+- Upload and temporary storage
+- Sheet selection and header mapping
+- Data parsing with field normalization
+- Validation and duplicate detection
+- Interactive table display for user review
+
+**Phase 2: Action Execution**
+- User-triggered processing of validated data
+- Real-time progress tracking
+- Granular error handling
+- Results aggregation and reporting
+
+This separation prevents processing failures and provides user control over when actions are executed.
+
 ## 3. Project Structure
 
 ```
@@ -130,6 +148,31 @@ ck-apstra-tauri/
 - **Data Type Validation**: Validate field formats and constraints
 - **Error Aggregation**: Collect and report all validation issues
 
+#### Defensive Data Processing
+**CRITICAL**: Apply defensive programming for robust Excel processing:
+
+- **Safe Field Access**: Never assume Excel headers exist; use Option/Result patterns
+- **Multi-Format Support**: Handle multiple possible header name variations for the same logical field
+- **Validation-First**: Validate data structure before attempting processing
+- **Graceful Degradation**: Skip malformed rows without stopping entire operation
+- **Error Context**: Provide detailed error information including row numbers and field names
+- **Backward Compatibility**: Support multiple Excel format versions simultaneously
+
+#### Field Naming Standards
+**CRITICAL**: Consistent field naming prevents integration failures:
+
+- **Raw Input Processing**: Field mapping (`field_0`, `field_1`, etc.) occurs ONLY during sheet selection stage
+- **Normalized Internal Names**: After sheet selection, all backend services use consistent field names:
+  ```
+  blueprint, server_label, switch_label, switch_ifname, server_ifname
+  link_speed, link_group_lag_mode, link_group_ct_names
+  server_tags, switch_tags, link_tags
+  ```
+- **UI Display Names**: Frontend may use display-friendly names for presentation
+- **Service Integration**: All backend services expect normalized field names consistently
+
+**Rule**: Never mix field naming conventions within a single service or data flow.
+
 ### 4.2 Data Visualization
 
 #### Interactive Table Component
@@ -163,6 +206,15 @@ ck-apstra-tauri/
 - **Detailed Logging**: Comprehensive error logs with context
 - **Recovery Options**: Retry failed operations
 - **User Notifications**: Clear error messages and suggested actions
+
+#### Critical Processing Patterns
+**IMPORTANT**: These patterns prevent regressions and race conditions:
+
+- **System Readiness Verification**: Ensure systems are ready before applying configurations
+- **Wait Mechanisms**: Implement proper polling for system state changes (3-second intervals, 60-second timeout)
+- **Race Condition Prevention**: Never proceed with dependent operations immediately after system creation
+- **Intelligent Processing**: Only process when data differs from existing state (no-op optimization)
+- **Selective Operations**: Only process interfaces with actual configuration changes needed
 
 ### 4.4 Security Requirements
 
@@ -260,10 +312,40 @@ ck-apstra-tauri/
 - **Security Tests**: File handling and input validation
 
 ### Code Quality Standards
-- **Rust**: Clippy linting, rustfmt formatting
-- **TypeScript**: ESLint + Prettier, strict type checking
+
+#### Modularization Requirements
+**CRITICAL**: Enforce strict modularization to prevent maintenance issues:
+
+- **Maximum Function Length**: 20-25 lines recommended
+- **Single Responsibility**: Each function should do ONE thing well  
+- **Configuration-Driven**: Extract constants and configurations to module tops
+- **Helper Functions**: Create focused, single-purpose helper functions
+- **Assembly Pattern**: Main functions should read like clear step-by-step recipes
+
+#### Code Review Standards
+**Mandatory Checks During Reviews:**
+- Functions over 25 lines must justify their complexity
+- Any function doing multiple distinct operations must be split
+- Configuration should be extracted from implementation
+- Repeated patterns (3+ times) must be extracted to helpers
+
+**Red Flags to Reject:**
+- Functions with multiple `// Section:` comments (multiple responsibilities)
+- Long parameter lists (poor separation of concerns)
+- Nested conditionals more than 2-3 levels deep
+- Copy-pasted code blocks with minor variations
+
+#### Language-Specific Standards
+- **Rust**: Clippy linting, rustfmt formatting, comprehensive error types
+- **TypeScript**: ESLint + Prettier, strict type checking, component modularization
 - **Documentation**: Inline documentation for all public APIs
-- **Error Handling**: Comprehensive error types and recovery
+- **Error Handling**: Graceful degradation with detailed logging
+
+#### Testing Standards for Modular Code
+- **Unit Testing**: Each helper function should be testable in isolation
+- **Integration Testing**: Assembly functions tested with mocked helpers
+- **Component Testing**: React components tested with clear separation of concerns
+- **Configuration Testing**: Validate configuration-driven behavior separately
 
 ## 8. Success Criteria
 
