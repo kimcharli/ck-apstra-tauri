@@ -10,11 +10,14 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
     
     // Use provided conversion map or load default
     let effective_conversion_map = if let Some(map) = conversion_map {
+        log::info!("Using provided conversion map with {} mappings", map.mappings.len());
         Some(map)
     } else {
         match crate::services::conversion_service::ConversionService::load_default_conversion_map() {
             Ok(default_map) => {
-                log::info!("Using default conversion map");
+                log::info!("Using default conversion map with {} mappings, header_row: {:?}", 
+                    default_map.mappings.len(), default_map.header_row);
+                log::debug!("Default mappings: {:?}", default_map.mappings);
                 Some(default_map)
             }
             Err(e) => {
@@ -67,10 +70,12 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
     
     // Extract headers
     let headers: Vec<String> = worksheet_rows[header_row_idx].iter()
-        .map(|cell| cell.to_string().trim().to_lowercase())
+        .map(|cell| cell.to_string().trim().to_string()) // Don't lowercase here, keep original case
         .collect();
     
-    log::info!("Found headers: {:?}", headers);
+    log::info!("Found headers (original case): {:?}", headers);
+    log::info!("Header row index: {}", header_row_idx);
+    
     
     // Create field mapping using conversion map or default logic
     let field_map = if let Some(conv_map) = conversion_map {
@@ -88,7 +93,8 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
         let row_data: HashMap<String, String> = row.iter().enumerate()
             .map(|(col_idx, cell)| {
                 let header = headers.get(col_idx).cloned().unwrap_or_else(|| format!("col_{}", col_idx));
-                (header, cell.to_string().trim().to_string())
+                let value = cell.to_string().trim().to_string();
+                (header, value)
             })
             .collect();
         
@@ -126,8 +132,9 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     
     for (field_name, variations) in header_variations {
         for header in headers {
+            let header_lower = header.to_lowercase();
             for variation in &variations {
-                if header.contains(variation) || variation.contains(header) {
+                if header_lower.contains(variation) || variation.contains(&header_lower) {
                     field_map.insert(field_name.to_string(), header.clone());
                     break;
                 }
@@ -142,23 +149,52 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
 fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &HashMap<String, String>) -> HashMap<String, String> {
     let mut field_map = HashMap::new();
     
+    // Helper function to normalize headers for comparison
+    let normalize_header = |header: &str| -> String {
+        header.to_lowercase()
+            .replace('\r', "")  // Remove carriage returns
+            .replace('\n', "")  // Remove line feeds
+            .trim().to_string()
+    };
+    
     // Use conversion map to map Excel headers to target fields
     for header in headers {
-        // Try exact match first
-        if let Some(target_field) = conversion_mappings.get(header) {
-            field_map.insert(target_field.clone(), header.clone());
-        } else {
-            // Try case-insensitive match
+        let normalized_header = normalize_header(header);
+        
+        // Try exact match first (after normalization)
+        let mut found = false;
+        for (excel_header, target_field) in conversion_mappings {
+            let normalized_excel_header = normalize_header(excel_header);
+            
+            log::trace!("Comparing '{}' vs '{}' (normalized)", normalized_header, normalized_excel_header);
+            
+            if normalized_header == normalized_excel_header {
+                field_map.insert(target_field.clone(), header.clone());
+                log::debug!("Mapped '{}' -> '{}' (via normalized match)", header, target_field);
+                found = true;
+                break;
+            }
+        }
+        
+        // If no exact match found, try partial matching
+        if !found {
             for (excel_header, target_field) in conversion_mappings {
-                if header.to_lowercase() == excel_header.to_lowercase() {
+                let normalized_excel_header = normalize_header(excel_header);
+                
+                if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
                     field_map.insert(target_field.clone(), header.clone());
+                    log::debug!("Mapped '{}' -> '{}' (via partial match)", header, target_field);
                     break;
                 }
             }
         }
     }
     
-    log::info!("Conversion field mapping: {:?}", field_map);
+    log::info!("Conversion field mapping created {} mappings: {:?}", field_map.len(), field_map);
+    if field_map.is_empty() {
+        log::warn!("NO FIELD MAPPINGS CREATED! Headers: {:?}", headers);
+        log::warn!("Conversion mappings available: {:?}", conversion_mappings);
+    }
     field_map
 }
 
@@ -173,7 +209,9 @@ fn convert_to_network_config_row(
             .map(|s| s.to_string());
         
         if result.is_none() {
-            log::debug!("Field '{}' not found or empty. Field map: {:?}", field_name, field_map.get(field_name));
+            log::debug!("Field '{}' not found or empty. Field map entry: {:?}, Row data for header: {:?}", 
+                field_name, field_map.get(field_name), 
+                field_map.get(field_name).and_then(|h| row_data.get(h)));
         }
         result
     };
@@ -183,9 +221,12 @@ fn convert_to_network_config_row(
     let switch_ifname = get_field("switch_ifname");
     
     log::debug!("Processing row - switch_label: {:?}, switch_ifname: {:?}", switch_label, switch_ifname);
+    log::debug!("Available row data keys: {:?}", row_data.keys().collect::<Vec<_>>());
+    log::debug!("Field map for switch fields: switch_label={:?}, switch_ifname={:?}", 
+        field_map.get("switch_label"), field_map.get("switch_ifname"));
     
     if switch_label.is_none() && switch_ifname.is_none() {
-        log::debug!("Skipping row due to missing required fields");
+        log::debug!("Skipping row due to missing required switch fields");
         return None; // Skip rows without essential network info
     }
     

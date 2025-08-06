@@ -9,10 +9,17 @@
         "AE": "link_group_ifname",
         "LACPNeeded": "link_group_lag_mode",
         "LACP\nNeeded": "link_group_lag_mode",
+        "LACP\r\nNeeded": "link_group_lag_mode",
         "Speed\n(GB)": "link_speed",
+        "Speed\r\n(GB)": "link_speed",
         "Slot/Port": "server_ifname",
         "Host Name": "server_label",
         "External": "is_external",
-        "Server Tags": "server_tags"
+        "Server Tags": "server_tags",
+        "Device": "server_label",
+        "Connection Type\n(Copper/Fiber)": "connection_type",
+        "Connection Type\r\n(Copper/Fiber)": "connection_type",
+        "Trunk/Access\nPort": "port_type",
+        "Trunk/Access\r\nPort": "port_type"
     }
 }

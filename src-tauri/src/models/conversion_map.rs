@@ -31,7 +31,17 @@ impl ConversionMap {
         for (key, value) in json_map {
             if key == "header_row" {
                 header_row = value.as_u64().map(|v| v as u32);
+            } else if key == "mappings" {
+                // Handle nested mappings object
+                if let Some(mappings_obj) = value.as_object() {
+                    for (excel_header, target_field) in mappings_obj {
+                        if let Some(target_str) = target_field.as_str() {
+                            mappings.insert(excel_header.clone(), target_str.to_string());
+                        }
+                    }
+                }
             } else {
+                // Handle flat structure (backward compatibility)
                 if let Some(string_value) = value.as_str() {
                     mappings.insert(key, string_value.to_string());
                 }

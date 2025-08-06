@@ -71,6 +71,32 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Input validation for all user data
 - Error handling without exposing sensitive information
 
+## Debugging and Troubleshooting
+
+### Common Issues and Solutions
+
+**Excel Data Not Displaying**:
+- Check debug logs with `RUST_LOG=debug npm run tauri:dev`
+- Verify conversion map is loading: Look for "Using default conversion map with X mappings"
+- Ensure JSON structure matches expected format in `data/default_conversion_map.json`
+- Headers with line breaks (`\r\n`) are normalized during matching
+
+**Conversion Map Issues**:
+- JSON parsing supports both flat and nested "mappings" structure
+- Headers are matched case-insensitively with normalization
+- Debug logs show exact header bytes and field mappings created
+- Default conversion map embedded from `data/default_conversion_map.json`
+
+**Build Issues**:
+- Ensure Tauri dependencies are installed: `cargo install tauri-cli`
+- Check for missing icon files in `src-tauri/icons/`
+- Verify all required npm dependencies are installed
+
+### Debug Logging
+- Use `RUST_LOG=debug` for detailed backend logs
+- Check browser console for frontend errors
+- Header parsing shows exact byte representations for troubleshooting encoding issues
+
 ## Implementation Phases
 
 1. **Phase 1**: Basic infrastructure, file upload, data parsing, table display
