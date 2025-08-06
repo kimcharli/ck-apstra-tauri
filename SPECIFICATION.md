@@ -125,28 +125,35 @@ ck-apstra-tauri/
 #### Data Parsing Engine
 - **Required Column Headers**:
   ```
-  - blueprint
-  - server_label
-  - is_external
-  - server_tags
-  - link_group_ifname
-  - link_group_lag_mode
-  - link_group_ct_names
-  - link_group_tags
-  - link_speed
-  - server_ifname
-  - switch_label
-  - switch_ifname
-  - link_tags
-  - comment
+  - Switch (switch_label)
+  - Switch Interface (switch_ifname)
+  - Server (server_label)
+  - Server Interface (server_ifname)
+  - Switch Tags
+  - Link Tags
+  - CTs (link_group_ct_names)
+  - AE (link_group_ifname)
+  - LAG Mode (link_group_lag_mode)
+  - Speed (link_speed)
+  - External (is_external)
+  - Server Tags
   ```
 
+#### Conversion Mapping System
+- **Default Conversion Map**: Ships with predefined Excel header mappings loaded from embedded JSON
+- **User Customization**: Users can modify conversion mappings through dedicated UI interface
+- **Flexible Loading**: Support loading conversion maps from external JSON files
+- **Persistent Configuration**: Save user customizations to local configuration files
+- **Header Row Configuration**: Configurable header row location (default: row 1)
+- **Dynamic Updates**: Conversion map changes immediately apply to current Excel data
+
 #### Data Validation Rules
-- **Header Mapping**: Flexible header mapping to handle variations
-- **Required Fields**: Only process rows with all required fields present
-- **Duplicate Detection**: Skip rows with identical switch + switch_ifname
-- **Data Type Validation**: Validate field formats and constraints
-- **Error Aggregation**: Collect and report all validation issues
+- **Conversion-Based Mapping**: Use conversion maps to translate Excel headers to internal field names
+- **Fallback Logic**: Default header matching when no conversion map is configured
+- **Required Fields**: Only process rows with essential network information (switch_label, switch_ifname)
+- **Duplicate Detection**: Skip rows with identical switch + switch_ifname combinations
+- **Data Type Validation**: Validate field formats and constraints based on target field types
+- **Error Aggregation**: Collect and report all validation issues with specific row/column context
 
 #### Defensive Data Processing
 **CRITICAL**: Apply defensive programming for robust Excel processing:
@@ -216,7 +223,45 @@ ck-apstra-tauri/
 - **Intelligent Processing**: Only process when data differs from existing state (no-op optimization)
 - **Selective Operations**: Only process interfaces with actual configuration changes needed
 
-### 4.4 Security Requirements
+### 4.4 Conversion Mapping Architecture
+
+#### System Design
+The conversion mapping system provides flexible translation between Excel header names and internal field names, enabling the application to process diverse Excel formats without requiring users to modify their spreadsheets.
+
+#### Core Components
+
+**Backend Services**:
+- `ConversionService`: Core service for loading/saving conversion maps
+- `ConversionMapHandler`: Tauri command handlers for frontend-backend communication
+- Embedded default mapping from `../45738-webtool/data/conversion_map.json`
+- User data directory management for persistent configurations
+
+**Frontend Components**:
+- `ConversionMapManager`: Modal interface for editing conversion mappings
+- Interactive mapping table with add/remove/edit capabilities
+- Real-time preview of header-to-field mappings
+- File import/export functionality for sharing configurations
+
+**Data Models**:
+- `ConversionMap`: Core mapping structure with header_row and mappings HashMap
+- `ConversionMapInfo`: Extended metadata for saved configurations
+- `HeaderMapping`: UI state representation for conversion pairs
+
+#### Operational Flow
+
+1. **Default Loading**: Application embeds default conversion map from related project
+2. **User Customization**: Users access conversion manager through main UI button
+3. **Dynamic Application**: Changes to conversion map immediately reprocess current Excel data
+4. **Persistence**: User configurations saved to local application data directory
+5. **File Exchange**: Import/export JSON files for sharing conversion configurations
+
+#### Configuration Management
+- **Default Map Location**: Embedded in Rust binary from `data/default_conversion_map.json`
+- **User Map Storage**: `~/.local/share/ck-apstra-tauri/user_conversion_map.json` (Linux/macOS)
+- **Windows User Maps**: `%APPDATA%/ck-apstra-tauri/user_conversion_map.json`
+- **Header Row Flexibility**: Configurable header row position (1-based indexing)
+
+### 4.5 Security Requirements
 
 #### File Security
 - Sandboxed file processing

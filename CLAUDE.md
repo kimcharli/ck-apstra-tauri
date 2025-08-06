@@ -23,11 +23,31 @@ The project follows a Tauri architecture pattern with:
 - Sortable table display with filtering capabilities
 - Automatic cleanup of temporary files after processing
 
-### Expected Column Headers
-The application processes these specific network configuration fields:
-- blueprint, server_label, is_external, server_tags
-- link_group_ifname, link_group_lag_mode, link_group_ct_names, link_group_tags
-- link_speed, server_ifname, switch_label, switch_ifname, link_tags, comment
+### Conversion Mapping System
+The application uses a flexible conversion mapping system to translate Excel headers to internal field names:
+
+**Default Mappings** (from embedded JSON):
+- "Switch Name" → switch_label
+- "Port" → switch_ifname  
+- "Host Name" → server_label
+- "Slot/Port" → server_ifname
+- "Speed (GB)" → link_speed
+- "LACPNeeded" → link_group_lag_mode
+- "CTs" → link_group_ct_names
+- "AE" → link_group_ifname
+- "External" → is_external
+- And more...
+
+**User Customization**:
+- Access conversion manager through "Manage Conversion Map" button
+- Load/save custom mapping configurations
+- Import/export mapping files for sharing
+- Real-time preview of header mappings
+
+**Internal Field Names**:
+- blueprint, server_label, switch_label, switch_ifname, server_ifname
+- link_speed, link_group_lag_mode, link_group_ct_names, link_group_ifname
+- is_external, server_tags, switch_tags, link_tags, comment
 
 ### Action Processing
 - Support for multiple action types (e.g., import-generic-system)
@@ -37,11 +57,12 @@ The application processes these specific network configuration fields:
 
 ## Development Commands
 
-*Note: Project structure not yet initialized. Common Tauri commands will be:*
-- `npm run tauri dev` - Start development server
-- `npm run tauri build` - Build application for production
-- `cargo test` - Run Rust backend tests
+- `npm run tauri:dev` - Start development server
+- `npm run tauri:build` - Build application for production
+- `cargo test` - Run Rust backend tests (from src-tauri directory)
 - `npm test` - Run frontend tests
+- `npm run dev` - Start frontend development server only
+- `RUST_LOG=debug npm run tauri:dev` - Start with debug logging
 
 ## Security Considerations
 

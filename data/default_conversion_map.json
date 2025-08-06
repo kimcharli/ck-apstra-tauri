@@ -1,0 +1,18 @@
+{
+    "header_row": 2,
+    "mappings": {
+        "Switch Name": "switch_label",
+        "Switch Tags": "switch_tags",
+        "Port": "switch_ifname",
+        "Link Tags": "link_tags",
+        "CTs": "link_group_ct_names",
+        "AE": "link_group_ifname",
+        "LACPNeeded": "link_group_lag_mode",
+        "LACP\nNeeded": "link_group_lag_mode",
+        "Speed\n(GB)": "link_speed",
+        "Slot/Port": "server_ifname",
+        "Host Name": "server_label",
+        "External": "is_external",
+        "Server Tags": "server_tags"
+    }
+}

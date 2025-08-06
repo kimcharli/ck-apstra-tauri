@@ -8,10 +8,35 @@ mod utils;
 
 use commands::*;
 
+// Simple greeting command for testing
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
 fn main() {
+    env_logger::init();
+    
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            // Add command handlers here
+            greet,
+            upload_excel_file,
+            parse_excel_sheet,
+            validate_data,
+            process_import_generic_system,
+            get_processing_progress,
+            cleanup_temp_file,
+            load_default_conversion_map,
+            load_conversion_map_from_file,
+            save_conversion_map_to_file,
+            get_user_conversion_map_path,
+            save_user_conversion_map,
+            load_user_conversion_map,
+            create_conversion_map_info,
+            convert_headers_with_map,
+            update_conversion_mapping,
+            remove_conversion_mapping,
+            set_header_row
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
