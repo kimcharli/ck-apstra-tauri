@@ -78,10 +78,12 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
       let allResults: Array<{
         blueprintId: string;
         blueprintLabel: string;
+        blueprintUrl: string;
+        systemName: string;
         pod: string;
         rack: string;
         nodeId: string;
-        apstraUrl: string;
+        systemUrl: string;
         searchResults: any[];
       }> = [];
 
@@ -102,17 +104,20 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
           response.items.forEach((item: any) => {
             const extractedInfo = extractSystemInfo(item);
             const apstraHost = apstraApiService.getHost() || '10.85.192.59';
-            const apstraUrl = extractedInfo.nodeId ? 
+            const blueprintUrl = `https://${apstraHost}/#/blueprints/${systemBlueprintId}/staged`;
+            const systemUrl = extractedInfo.nodeId ? 
               `https://${apstraHost}/#/blueprints/${systemBlueprintId}/staged/physical/selection/node-preview/${extractedInfo.nodeId}` 
               : '';
 
             allResults.push({
               blueprintId: systemBlueprintId,
               blueprintLabel: selectedBlueprint.label,
+              blueprintUrl,
+              systemName: extractedInfo.systemName || systemSearchValue,
               pod: extractedInfo.pod,
               rack: extractedInfo.rack,
               nodeId: extractedInfo.nodeId,
-              apstraUrl,
+              systemUrl,
               searchResults: [item]
             });
           });
@@ -130,17 +135,20 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               response.items.forEach((item: any) => {
                 const extractedInfo = extractSystemInfo(item);
                 const apstraHost = apstraApiService.getHost() || '10.85.192.59';
-                const apstraUrl = extractedInfo.nodeId ? 
+                const blueprintUrl = `https://${apstraHost}/#/blueprints/${blueprint.id}/staged`;
+                const systemUrl = extractedInfo.nodeId ? 
                   `https://${apstraHost}/#/blueprints/${blueprint.id}/staged/physical/selection/node-preview/${extractedInfo.nodeId}` 
                   : '';
 
                 allResults.push({
                   blueprintId: blueprint.id,
                   blueprintLabel: blueprint.label,
+                  blueprintUrl,
+                  systemName: extractedInfo.systemName || systemSearchValue,
                   pod: extractedInfo.pod,
                   rack: extractedInfo.rack,
                   nodeId: extractedInfo.nodeId,
-                  apstraUrl,
+                  systemUrl,
                   searchResults: [item]
                 });
               });
@@ -188,24 +196,27 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   };
 
   const extractSystemInfo = (item: any) => {
-    // Extract pod and rack information from system data
+    // Extract pod, rack, and system information from system data
     let pod = '';
     let rack = '';
     let nodeId = '';
+    let systemName = '';
     
     if (item.system) {
-      // Try to extract pod and rack from system properties
+      // Try to extract information from system properties
       pod = item.system.pod || item.pod || '';
       rack = item.system.rack || item.rack || '';
       nodeId = item.system.id || item.id || '';
+      systemName = item.system.hostname || item.system.label || item.system.name || '';
     } else {
       // Fallback: try direct properties
       pod = item.pod || '';
       rack = item.rack || '';
       nodeId = item.id || '';
+      systemName = item.hostname || item.label || item.name || '';
     }
     
-    return { pod, rack, nodeId };
+    return { pod, rack, nodeId, systemName };
   };
 
   const handleIpSearch = async () => {
@@ -351,15 +362,21 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                       <th>Blueprint</th>
                       <th>Pod</th>
                       <th>Rack</th>
-                      <th>Apstra URL</th>
+                      <th>System</th>
                       <th>Search Result</th>
                     </tr>
                   </thead>
                   <tbody>
                     {searchResults.map((result, index) => (
                       <tr key={`${result.blueprintId}-${result.nodeId}-${index}`}>
-                        <td className="blueprint-name">
-                          {result.blueprintLabel}
+                        <td className="blueprint-cell">
+                          <button
+                            className="blueprint-btn"
+                            onClick={() => window.open(result.blueprintUrl, '_blank')}
+                            title={`Open blueprint ${result.blueprintLabel} in Apstra`}
+                          >
+                            {result.blueprintLabel}
+                          </button>
                         </td>
                         <td className="pod-name">
                           {result.pod || '-'}
@@ -367,19 +384,17 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                         <td className="rack-name">
                           {result.rack || '-'}
                         </td>
-                        <td className="apstra-url">
-                          {result.apstraUrl ? (
-                            <a 
-                              href={result.apstraUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="url-link"
-                              title="Open in Apstra"
+                        <td className="system-cell">
+                          {result.systemUrl ? (
+                            <button
+                              className="system-btn"
+                              onClick={() => window.open(result.systemUrl, '_blank')}
+                              title={`Open system ${result.systemName} in Apstra`}
                             >
-                              🔗 Open
-                            </a>
+                              {result.systemName}
+                            </button>
                           ) : (
-                            <span className="no-url">-</span>
+                            <span className="no-system">{result.systemName || '-'}</span>
                           )}
                         </td>
                         <td className="search-result">
