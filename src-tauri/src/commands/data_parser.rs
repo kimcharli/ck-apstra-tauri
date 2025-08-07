@@ -4,6 +4,19 @@ use crate::models::conversion_map::ConversionMap;
 use calamine::{Reader, Xlsx, open_workbook, Range, DataType};
 use std::collections::HashMap;
 
+// Helper function to log to both Rust logging and frontend LoggingService
+async fn log_to_frontend(level: &str, message: &str, details: Option<serde_json::Value>) {
+    // This would need to be implemented to send logs to frontend
+    // For now, just use regular Rust logging
+    match level {
+        "error" => log::error!("{}", message),
+        "warn" => log::warn!("{}", message), 
+        "info" => log::info!("{}", message),
+        "debug" => log::debug!("{}", message),
+        _ => log::info!("{}", message),
+    }
+}
+
 #[command]
 pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion_map: Option<ConversionMap>) -> Result<Vec<NetworkConfigRow>, String> {
     log::info!("Parsing sheet '{}' from file: {}", sheet_name, file_path);
@@ -119,10 +132,10 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     
     // Define possible header variations for each field
     let header_variations = vec![
-        ("server_label", vec!["server_label", "server", "server_name", "hostname"]),
+        ("server_label", vec!["server_label", "server", "server_name", "hostname", "host name"]),
         ("switch_label", vec!["switch_label", "switch", "switch_name", "device"]),
         ("switch_ifname", vec!["switch_ifname", "switch_interface", "switch_port", "port", "interface"]),
-        ("server_ifname", vec!["server_ifname", "server_interface", "server_port", "nic"]),
+        ("server_ifname", vec!["server_ifname", "server_interface", "server_port", "nic", "slot", "slot/port"]),
         ("is_external", vec!["is_external", "external", "ext"]),
         ("server_tags", vec!["server_tags", "tags"]),
         ("link_group_ifname", vec!["link_group_ifname", "lag_name", "bond_name"]),
@@ -241,7 +254,7 @@ fn convert_to_network_config_row(
     }
     
     Some(NetworkConfigRow {
-        blueprint: get_field("blueprint"),
+        blueprint: None, // Blueprint is determined by application context, not Excel input
         server_label: get_field("server_label"),
         is_external: get_field("is_external").and_then(|s| {
             match s.to_lowercase().as_str() {
