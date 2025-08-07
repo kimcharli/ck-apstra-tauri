@@ -590,3 +590,205 @@ The application now includes direct integration with Apstra AOS REST API, enabli
 - **Blueprint Management**: CRUD operations for blueprint manipulation
 - **Device Configuration**: Direct device configuration API integration
 - **Batch Operations**: Multi-system search and management capabilities
+
+## 11. Centralized Authentication Architecture (Updated 2024-01-15)
+
+### Overview
+The application now implements a centralized authentication architecture using React Context and custom hooks to eliminate code duplication and provide consistent authentication state management across all components.
+
+### Architecture Pattern: Context + Hooks
+
+#### Core Components
+
+**AuthContext Provider** (`src/contexts/AuthContext.tsx`):
+- Centralized authentication state management using React useReducer
+- Periodic authentication status checking (configurable interval, default 30 seconds)
+- Comprehensive error handling with retry logic and exponential backoff
+- Session lifecycle management with automatic cleanup
+- Integration with existing logging service for audit trails
+
+**Enhanced Authentication Service** (`src/services/AuthService.ts`):
+- Wrapper around existing ApstraApiService for enhanced error handling
+- Standardized error classification (NETWORK, AUTHENTICATION, SESSION_EXPIRED, UNKNOWN)
+- Configurable retry mechanisms with intelligent backoff strategies
+- Session expiration detection and automatic cleanup
+- Input validation and sanitization for security
+
+**Custom React Hooks**:
+- `useAuth()`: Full authentication context access for components needing all functionality
+- `useAuthStatus()`: Simplified hook for components only needing status information  
+- `useAuthGuard()`: Authentication guard for protected operations with automatic redirects
+
+#### Type System
+**Comprehensive Type Definitions** (`src/types/auth.ts`):
+- `AuthState`: Complete authentication state with loading, error, and timing information
+- `AuthContextValue`: Context interface defining all available authentication operations
+- `AuthConfig`: Configurable authentication behavior (intervals, retries, timeouts)
+- `AuthError`: Standardized error structure with classification and timestamps
+
+### Implementation Benefits
+
+#### Code Quality Improvements
+- **Eliminated Duplication**: Removed 3 separate authentication checking implementations
+- **Centralized Logic**: Single source of truth for authentication state across application
+- **Consistent Error Handling**: Standardized error classification and user feedback
+- **Enhanced Maintainability**: Authentication logic changes in one location affect entire app
+
+#### User Experience Enhancements
+- **Real-time Status Updates**: Immediate authentication status reflection across all components
+- **Intelligent Retry Logic**: Automatic recovery from temporary network issues
+- **Session Management**: Proactive session expiration detection and cleanup
+- **Contextual Feedback**: Specific error messages based on failure classification
+
+#### Developer Experience
+- **Clean Component APIs**: Components focus on presentation, authentication handled declaratively
+- **Type Safety**: Comprehensive TypeScript definitions prevent authentication-related bugs
+- **Testing Support**: Isolated authentication logic enables targeted unit testing
+- **Extensibility**: Hook-based architecture allows easy addition of new authentication features
+
+### Architectural Decisions
+
+#### Pattern Selection Rationale
+- **React Context over Redux**: Simpler implementation for authentication-focused state
+- **Custom Hooks over HOCs**: Better TypeScript integration and component composition
+- **Service Layer Enhancement**: Leverages existing backend integration while adding robustness
+
+#### Error Handling Strategy
+- **Classification-Based Errors**: Different handling strategies for network vs authentication failures
+- **Retry with Backoff**: Intelligent retry for transient network issues
+- **User-Centric Messages**: Error messages tailored to user actions and context
+- **Logging Integration**: All authentication events captured for post-mortem analysis
+
+#### Performance Considerations
+- **Configurable Check Intervals**: Balance between responsiveness and API load
+- **Smart Checking Logic**: Avoid unnecessary API calls when authentication status is stable
+- **Session Caching**: Local state reduces redundant authentication verification
+- **Cleanup Management**: Automatic cleanup of timers and subscriptions prevents memory leaks
+
+### Integration with Existing Systems
+- **Backward Compatibility**: Existing ApstraApiService continues to work unchanged
+- **Logging Integration**: All authentication events logged through existing logging service
+- **Configuration Reuse**: Leverages existing Apstra configuration management
+- **Error Propagation**: Authentication errors properly surface to existing error handling
+
+### Component Refactoring Impact
+
+#### Before: Duplicated Implementation
+```typescript
+// NavigationHeader.tsx - 30 second polling
+useEffect(() => {
+  const checkApstraAuth = async () => {
+    try {
+      const authStatus = await apstraApiService.checkAuthentication();
+      setIsApstraAuthenticated(authStatus);
+    } catch (error) {
+      setIsApstraAuthenticated(false);
+    }
+  };
+  const interval = setInterval(checkApstraAuth, 30000);
+  return () => clearInterval(interval);
+}, []);
+
+// Similar patterns in ApstraConfigManager.tsx and ToolsPage.tsx
+```
+
+#### After: Centralized Implementation
+```typescript
+// Any component needing authentication status
+import { useAuthStatus } from '../../hooks/useAuthStatus';
+
+const { isAuthenticated, isLoading, hasError } = useAuthStatus();
+```
+
+### Future Enhancements
+- **Multi-User Support**: Extend context for user role management
+- **Token Refresh**: Implement automatic token renewal
+- **Offline Support**: Cache authentication state for offline scenarios
+- **Analytics Integration**: Enhanced authentication event tracking
+
+## 12. User Experience Design Standards (Updated 2024-01-15)
+
+### Authentication Flow UX Requirements
+
+#### Visual State System
+The application implements a **discomfort-to-comfort UX progression** designed to guide users through proper authentication workflow:
+
+**CRITICAL REQUIREMENTS** (Must be maintained in code):
+
+#### 12.1 Default Password Configuration
+- **Default password MUST be 'admin'** in all configuration contexts:
+  - Form initialization: `password: 'admin'`
+  - Default configuration file: `data/default_apstra_config.json` password field
+  - User configuration loading: fallback to 'admin' when empty
+- **Rationale**: Common default for Apstra systems, reduces setup friction
+
+#### 12.2 Uncomfortable Authentication State (Not Connected)
+- **Visual Design**: Red background with pulsing animation
+- **CSS Implementation**:
+  ```css
+  .connect-button {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    border: 2px solid #dc3545;
+    animation: uncomfortable-pulse 2s infinite;
+  }
+  
+  @keyframes uncomfortable-pulse {
+    0%, 100% { 
+      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+      transform: scale(1);
+    }
+    50% { 
+      box-shadow: 0 6px 20px rgba(220, 53, 69, 0.6);
+      transform: scale(1.02);
+    }
+  }
+  ```
+- **Button Text**: "Connect to Apstra" (urgent language)
+- **Psychological Effect**: Creates visual urgency to complete authentication
+
+#### 12.3 Comfortable Authentication State (Connected)
+- **Visual Design**: Green background with subtle shimmer effect
+- **CSS Implementation**:
+  ```css
+  .connect-button.connected {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    border-color: #28a745;
+    animation: none !important; /* Remove uncomfortable pulse */
+  }
+  
+  .connect-button.connected::before {
+    content: '';
+    position: absolute;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    animation: shimmer 2s infinite;
+  }
+  ```
+- **Button Text**: "✅ Connected" (success confirmation)
+- **Psychological Effect**: Visual reward for completing authentication
+
+#### 12.4 UX Flow Implementation Requirements
+
+**State Transition Logic**:
+1. **Initial Load**: Button appears in uncomfortable (red/pulsing) state
+2. **Authentication Success**: Immediate transition to comfortable (green/shimmer) state
+3. **Configuration Change**: Return to uncomfortable state, invalidate session
+4. **Session Expiration**: Automatic return to uncomfortable state
+
+**Tools Page Integration**:
+- **Disabled Sections**: When not authenticated, show disabled/grayed out sections
+- **Warning Banners**: Prominent banner directing users to authentication
+- **Navigation Integration**: One-click navigation to Apstra Connection page
+
+#### 12.5 Documentation Requirements
+These UX standards MUST be documented in:
+- **SPECIFICATION.md**: Formal specification with CSS examples
+- **Component Documentation**: Inline comments explaining UX rationale
+- **Test Scenarios**: Automated tests validating state transitions
+
+#### 12.6 Code Maintenance Standards
+- **CSS Class Naming**: `.connect-button` and `.connect-button.connected` classes required
+- **Animation Standards**: All animations must be cancellable with `animation: none !important`
+- **State Management**: Authentication state must drive visual state directly
+- **No Override Exceptions**: UX state must never be overridden by local component state
+
+**CRITICAL**: Any changes to authentication components must preserve these UX patterns to maintain user guidance effectiveness.

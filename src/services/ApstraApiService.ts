@@ -34,6 +34,7 @@ export class ApstraApiService {
   private static instance: ApstraApiService;
   private sessionId: string;
   private isAuthenticated: boolean = false;
+  private baseUrl: string = '';
 
   private constructor() {
     this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -54,6 +55,20 @@ export class ApstraApiService {
     return this.isAuthenticated;
   }
 
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  public getHost(): string {
+    if (!this.baseUrl) return '';
+    try {
+      const url = new URL(this.baseUrl);
+      return url.host;
+    } catch {
+      return this.baseUrl;
+    }
+  }
+
   /**
    * Login to Apstra API
    */
@@ -70,6 +85,7 @@ export class ApstraApiService {
       
       if (result.success && result.data) {
         this.isAuthenticated = true;
+        this.baseUrl = baseUrl;
         return result.data;
       } else {
         this.isAuthenticated = false;
@@ -106,6 +122,37 @@ export class ApstraApiService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Search for a system across all blueprints and return the found blueprint info
+   */
+  public async searchSystemAcrossBlueprints(serverName: string, blueprints: Array<{id: string, label: string}>): Promise<{
+    blueprintId: string;
+    blueprintLabel: string;
+    response: QueryResponse;
+  } | null> {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated. Please login first.');
+    }
+
+    for (const blueprint of blueprints) {
+      try {
+        const response = await this.searchSystems(blueprint.id, serverName);
+        if (response.count > 0) {
+          return {
+            blueprintId: blueprint.id,
+            blueprintLabel: blueprint.label,
+            response
+          };
+        }
+      } catch (error) {
+        // Continue searching other blueprints if this one fails
+        console.warn(`Search failed for blueprint ${blueprint.label}:`, error);
+      }
+    }
+    
+    return null; // System not found in any blueprint
   }
 
   /**

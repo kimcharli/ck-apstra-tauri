@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { save } from '@tauri-apps/api/dialog';
 import { writeTextFile } from '@tauri-apps/api/fs';
 import { logger } from '../../services/LoggingService';
-import { apstraApiService } from '../../services/ApstraApiService';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import './NavigationHeader.css';
 
 interface NavigationHeaderProps {
@@ -22,25 +22,9 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   const [isConnectionAlive, setIsConnectionAlive] = useState<boolean | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isDownloadingLogs, setIsDownloadingLogs] = useState(false);
-  const [isApstraAuthenticated, setIsApstraAuthenticated] = useState(false);
-
-  // Check Apstra authentication status periodically
-  useEffect(() => {
-    const checkApstraAuth = async () => {
-      try {
-        const authStatus = await apstraApiService.checkAuthentication();
-        setIsApstraAuthenticated(authStatus);
-      } catch (error) {
-        setIsApstraAuthenticated(false);
-      }
-    };
-
-    checkApstraAuth();
-    
-    // Check every 30 seconds
-    const interval = setInterval(checkApstraAuth, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  
+  // Use centralized authentication state
+  const { isAuthenticated: isApstraAuthenticated } = useAuthStatus();
 
   const handleNavigation = (page: typeof currentPage) => {
     logger.logNavigation(currentPage, page, 'navigation_button');
@@ -57,7 +41,7 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
       await invoke<string>('greet', { name: 'Connection Test' });
       setIsConnectionAlive(true);
       logger.logInfo('SYSTEM', 'Tauri connection test successful');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Tauri connection test failed:', error);
       setIsConnectionAlive(false);
       logger.logError('SYSTEM', 'Tauri connection test failed', { error: error.toString() });
@@ -109,7 +93,7 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         
         alert(`Logs successfully exported to ${filePath}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to download logs:', error);
       logger.logError('SYSTEM', 'Log download failed', { error: error.toString() });
       alert(`Failed to export logs: ${error}`);
@@ -138,6 +122,7 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           <button 
             onClick={() => handleNavigation('apstra-connection')}
             className={`nav-btn ${currentPage === 'apstra-connection' ? 'active' : ''} ${isApstraAuthenticated ? 'authenticated' : ''}`}
+            title={isApstraAuthenticated ? 'Connected to Apstra' : 'Not connected to Apstra'}
           >
             {isApstraAuthenticated ? '✅ 1. Apstra Connection' : '1. Apstra Connection'}
           </button>

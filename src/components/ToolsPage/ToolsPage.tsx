@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import { logger } from '../../services/LoggingService';
 import { apstraApiService } from '../../services/ApstraApiService';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import './ToolsPage.css';
 
 interface ToolsPageProps {
@@ -25,8 +26,18 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   const [ipSearchValue, setIpSearchValue] = useState('10.90.194.157/32');
   const [ipBlueprintLabel, setIpBlueprintLabel] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [foundSystemInfo, setFoundSystemInfo] = useState<{
+    blueprintId: string;
+    blueprintLabel: string;
+    pod?: string;
+    rack?: string;
+    nodeId?: string;
+    apstraUrl?: string;
+  } | null>(null);
+  
+  // Use centralized authentication guard
+  const { isAuthenticated } = useAuthStatus();
   const [blueprints] = useState<Blueprint[]>([
     { label: 'DH50-Colo1', id: '32f27ec4-c6bf-4f2e-a00a-8cd7f674f369' },
     { label: 'DH2-Colo2', id: '9818f405-40e8-4b7d-92eb-527a4f7d6246' },
@@ -34,24 +45,12 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
     { label: 'DH4-Colo2', id: '9059ee6c-5ac2-4fee-bd65-83d429ccf850' }
   ]);
 
-  // Check authentication status on component mount and when it becomes visible
+  // Set default blueprint on visibility
   useEffect(() => {
     if (isVisible) {
-      checkAuthenticationStatus();
+      setSystemBlueprintId(''); // Default to empty - 'Select Blueprint'
     }
-    setSystemBlueprintId(blueprints[0]?.id || ''); // Default to first blueprint
   }, [isVisible]);
-
-  const checkAuthenticationStatus = async () => {
-    try {
-      const authStatus = await apstraApiService.checkAuthentication();
-      setIsAuthenticated(authStatus);
-      // Don't auto-authenticate here - let user go to Apstra Connection page
-    } catch (error: any) {
-      console.error('Failed to check authentication:', error);
-      setIsAuthenticated(false);
-    }
-  };
 
 
   const handleSystemSearch = async () => {
@@ -64,79 +63,106 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
       return;
     }
 
-    // Determine blueprint ID to use
-    let blueprintId = systemBlueprintId;
-    if (systemBlueprintLabel.trim()) {
-      const matchedBlueprint = blueprints.find(bp => 
-        bp.label.toLowerCase().includes(systemBlueprintLabel.toLowerCase())
-      );
-      if (matchedBlueprint) {
-        blueprintId = matchedBlueprint.id;
-      } else {
-        // If blueprint label provided but not found, show warning
-        if (window.confirm(`Blueprint "${systemBlueprintLabel}" not found in the blueprint list. Continue with default blueprint "${blueprints[0]?.label}"?`)) {
-          blueprintId = blueprints[0]?.id || '';
-        } else {
-          return;
-        }
-      }
-    }
-
-    if (!blueprintId) {
-      alert('No blueprint selected. Please select a blueprint or provide a blueprint label.');
-      return;
-    }
-    
     logger.logButtonClick('System Search', 'ToolsPage', { 
       searchValue: systemSearchValue, 
-      blueprintId: blueprintId,
-      blueprintLabel: systemBlueprintLabel 
+      searchType: 'cross-blueprint'
     });
     logger.logWorkflowStart('System Search', {
       searchTerm: systemSearchValue,
-      blueprintId: blueprintId,
       timestamp: new Date().toISOString()
     });
     
     setIsSearching(true);
     setSearchResults([]);
+    setFoundSystemInfo(null);
     
     try {
-      console.log('Searching for system:', systemSearchValue, 'in blueprint:', blueprintId);
+      console.log('Searching for system across all blueprints:', systemSearchValue);
       
-      const response = await apstraApiService.searchSystems(blueprintId, systemSearchValue);
+      // Search across all blueprints
+      const foundSystem = await apstraApiService.searchSystemAcrossBlueprints(systemSearchValue, blueprints);
       
-      setSearchResults(response.items || []);
-      
-      logger.logWorkflowComplete('System Search', {
-        status: 'completed',
-        searchTerm: systemSearchValue,
-        blueprintId: blueprintId,
-        resultsFound: response.count,
-        results: response.items
-      });
-      
-      if (response.count > 0) {
-        alert(`System search completed! Found ${response.count} result(s) for "${systemSearchValue}". Check console for details.`);
-        console.log('Search results:', response.items);
+      if (foundSystem) {
+        setSearchResults(foundSystem.response.items || []);
+        
+        // Extract system information for display
+        const systemItem = foundSystem.response.items[0];
+        const extractSystemInfo = (item: any) => {
+          // Extract pod and rack information from system data
+          let pod = '';
+          let rack = '';
+          let nodeId = '';
+          
+          if (item.system) {
+            // Try to extract pod and rack from system properties
+            pod = item.system.pod || item.pod || '';
+            rack = item.system.rack || item.rack || '';
+            nodeId = item.system.id || item.id || '';
+          }
+          
+          return { pod, rack, nodeId };
+        };
+        
+        const { pod, rack, nodeId } = extractSystemInfo(systemItem);
+        
+        // Get Apstra host from the current configuration
+        const apstraHost = apstraApiService.getHost() || '10.85.192.59';
+        const apstraUrl = nodeId ? 
+          `https://${apstraHost}/#/blueprints/${foundSystem.blueprintId}/staged/physical/selection/node-preview/${nodeId}` 
+          : '';
+        
+        const systemInfo = {
+          blueprintId: foundSystem.blueprintId,
+          blueprintLabel: foundSystem.blueprintLabel,
+          pod,
+          rack,
+          nodeId,
+          apstraUrl
+        };
+        
+        setFoundSystemInfo(systemInfo);
+        
+        // Auto-select the found blueprint
+        setSystemBlueprintId(foundSystem.blueprintId);
+        setSystemBlueprintLabel(foundSystem.blueprintLabel);
+        
+        logger.logWorkflowComplete('System Search', {
+          status: 'completed',
+          searchTerm: systemSearchValue,
+          blueprintId: foundSystem.blueprintId,
+          blueprintLabel: foundSystem.blueprintLabel,
+          resultsFound: foundSystem.response.count,
+          systemInfo
+        });
+        
+        console.log('System found in blueprint:', foundSystem.blueprintLabel);
+        console.log('System info:', systemInfo);
+        console.log('Search results:', foundSystem.response.items);
+        
       } else {
-        alert(`No systems found matching "${systemSearchValue}" in the selected blueprint.`);
+        // System not found in any blueprint
+        setFoundSystemInfo(null);
+        setSystemBlueprintId('');
+        
+        logger.logWorkflowComplete('System Search', {
+          status: 'not_found',
+          searchTerm: systemSearchValue,
+          searched_blueprints: blueprints.length
+        });
+        
+        alert(`System "${systemSearchValue}" not found in any blueprint.`);
       }
     } catch (error: any) {
       console.error('System search failed:', error);
       logger.logError('API_CALL', 'System search failed', {
         searchTerm: systemSearchValue,
-        blueprintId: blueprintId,
         error: error.toString()
       });
       
       // Handle specific error cases
       if (error.message?.includes('Not authenticated')) {
         alert('Authentication expired. Please go to Apstra Connection page and reconnect.');
-        setIsAuthenticated(false);
         onNavigate('apstra-connection');
-      } else if (error.message?.includes('Blueprint not found')) {
-        alert(`Blueprint not found. Please check the blueprint ID: ${blueprintId}`);
       } else {
         alert(`System search failed: ${error.message || error}`);
       }
@@ -278,6 +304,42 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               </div>
             )}
           </div>
+          {foundSystemInfo && (
+            <div className="system-info-display">
+              <h4>System Found! 🎯</h4>
+              <div className="system-info-grid">
+                <div className="info-item">
+                  <label>Blueprint:</label>
+                  <span className="info-value">{foundSystemInfo.blueprintLabel}</span>
+                </div>
+                {foundSystemInfo.pod && (
+                  <div className="info-item">
+                    <label>Pod:</label>
+                    <span className="info-value">{foundSystemInfo.pod}</span>
+                  </div>
+                )}
+                {foundSystemInfo.rack && (
+                  <div className="info-item">
+                    <label>Rack:</label>
+                    <span className="info-value">{foundSystemInfo.rack}</span>
+                  </div>
+                )}
+                {foundSystemInfo.apstraUrl && (
+                  <div className="info-item">
+                    <label>Apstra URL:</label>
+                    <a 
+                      href={foundSystemInfo.apstraUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="apstra-link"
+                    >
+                      Open in Apstra 🔗
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           {searchResults.length > 0 && (
             <div className="search-results">
               <h4>Search Results ({searchResults.length}):</h4>

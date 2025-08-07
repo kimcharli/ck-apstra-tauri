@@ -5,6 +5,7 @@ import ConversionMapManager from './components/ConversionMapManager/ConversionMa
 import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigManager';
 import ProvisioningPage from './components/ProvisioningPage/ProvisioningPage';
 import ToolsPage from './components/ToolsPage/ToolsPage';
+import { AuthProvider } from './contexts/AuthContext';
 import { logger } from './services/LoggingService';
 import './App.css';
 
@@ -47,7 +48,7 @@ function App() {
       await invoke<string>('greet', { name: 'Connection Test' });
       setIsConnectionAlive(true);
       logger.logInfo('SYSTEM', 'Main app Tauri connection test successful');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Tauri connection test failed:', error);
       setIsConnectionAlive(false);
       logger.logError('SYSTEM', 'Main app Tauri connection test failed', { error: error.toString() });
@@ -125,7 +126,8 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <AuthProvider>
+      <div className="app">
       <header className="app-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Apstra Provisioning Tool</h1>
@@ -371,7 +373,8 @@ function App() {
         onClose={() => setShowToolsPage(false)}
         onNavigate={handleNavigation}
       />
-    </div>
+      </div>
+    </AuthProvider>
   );
 }
 

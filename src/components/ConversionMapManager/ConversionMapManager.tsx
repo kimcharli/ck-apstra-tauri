@@ -15,7 +15,6 @@ interface ConversionMapManagerProps {
 const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({ 
   onConversionMapChange, 
   isVisible = false,
-  onClose,
   onNavigate
 }) => {
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);

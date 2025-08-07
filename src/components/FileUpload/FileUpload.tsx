@@ -10,7 +10,6 @@ interface FileUploadProps {
 const FileUpload: React.FC<FileUploadProps> = ({ onSheetsLoaded }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
   const handleFileSelect = async () => {
     try {
@@ -32,7 +31,6 @@ const FileUpload: React.FC<FileUploadProps> = ({ onSheetsLoaded }) => {
       }
 
       const filePath = selected as string;
-      setSelectedFile(filePath);
 
       // Process the Excel file and get sheet names
       const sheets = await invoke<string[]>('upload_excel_file', { filePath });

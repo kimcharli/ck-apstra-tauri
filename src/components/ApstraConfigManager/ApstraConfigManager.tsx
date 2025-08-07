@@ -3,7 +3,8 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { open, save } from '@tauri-apps/api/dialog';
 import { ApstraConfig, ApstraConfigUIState } from '../../types';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
-import { apstraApiService } from '../../services/ApstraApiService';
+import { useAuth } from '../../contexts/AuthContext';
+import { useAuthStatus } from '../../hooks/useAuthStatus';
 import './ApstraConfigManager.css';
 
 interface ApstraConfigManagerProps {
@@ -16,7 +17,6 @@ interface ApstraConfigManagerProps {
 
 const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   isVisible,
-  onClose,
   onConfigChange,
   currentConfig,
   onNavigate
@@ -30,7 +30,10 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   });
 
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Use centralized authentication
+  const { authenticate, logout } = useAuth();
+  const { isAuthenticated } = useAuthStatus();
 
   const [formData, setFormData] = useState<ApstraConfig>({
     host: '',
@@ -49,19 +52,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     if (isVisible && !state.currentConfig) {
       loadDefaultConfig();
     }
-    // Check authentication status when component mounts
-    checkAuthenticationStatus();
   }, [isVisible]);
-
-  const checkAuthenticationStatus = async () => {
-    try {
-      const authStatus = await apstraApiService.checkAuthentication();
-      setIsAuthenticated(authStatus);
-    } catch (error) {
-      console.error('Failed to check authentication:', error);
-      setIsAuthenticated(false);
-    }
-  };
 
   useEffect(() => {
     if (currentConfig) {
@@ -105,9 +96,8 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
 
     // If connection-related fields change, invalidate authentication
     if (['host', 'port', 'username', 'password', 'use_ssl'].includes(field as string) && isAuthenticated) {
-      setIsAuthenticated(false);
       setState(prev => ({ ...prev, connectionStatus: 'unknown' }));
-      apstraApiService.logout(); // Clear the session
+      logout(); // Use centralized logout
       console.log(`Apstra configuration field '${field}' changed. Authentication invalidated.`);
     }
   };
@@ -139,7 +129,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     if (!validateConfig()) return;
 
     setIsConnecting(true);
-    setIsAuthenticated(false);
 
     try {
       // First save the configuration
@@ -151,22 +140,20 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
 
       console.log('Authenticating with Apstra:', formData.host);
 
-      // Attempt authentication
-      const loginResult = await apstraApiService.login(baseUrl, formData.username, formData.password);
+      // Use centralized authentication
+      await authenticate(baseUrl, formData.username, formData.password);
       
-      setIsAuthenticated(true);
       setState(prev => ({ 
         ...prev, 
         connectionStatus: 'success',
         validationErrors: []
       }));
 
-      console.log('Successfully authenticated with Apstra. Session ID:', loginResult.session_id);
+      console.log('Successfully authenticated with Apstra.');
       alert('Successfully connected to Apstra! You can now use the Tools page.');
       
     } catch (error: any) {
       console.error('Authentication failed:', error);
-      setIsAuthenticated(false);
       setState(prev => ({ 
         ...prev, 
         connectionStatus: 'failed',

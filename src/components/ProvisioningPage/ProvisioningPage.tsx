@@ -18,7 +18,6 @@ interface ProvisioningPageProps {
 
 const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
   isVisible,
-  onClose,
   onNavigate,
   conversionMap,
   apstraConfig
@@ -83,7 +82,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           blueprintValidation: {found: uniqueDevices.size, total: uniqueDevices.size}
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to parse sheet data:', error);
       logger.logError('DATA_CHANGE', 'Excel sheet parsing failed', { 
         sheetName, 
@@ -133,7 +132,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
       });
       
       alert(`Successfully initiated provisioning for ${selectedRows.length} network configurations`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Provisioning failed:', error);
       logger.logError('WORKFLOW', 'Network provisioning failed', {
         selectedRows: selectedRows.length,
