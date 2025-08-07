@@ -27,14 +27,6 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   const [ipBlueprintLabel, setIpBlueprintLabel] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
-  const [foundSystemInfo, setFoundSystemInfo] = useState<{
-    blueprintId: string;
-    blueprintLabel: string;
-    pod?: string;
-    rack?: string;
-    nodeId?: string;
-    apstraUrl?: string;
-  } | null>(null);
   
   // Use centralized authentication guard
   const { isAuthenticated } = useAuthStatus();
@@ -63,99 +55,123 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
       return;
     }
 
+    // Determine search strategy based on blueprint selection
+    const isSpecificBlueprint = systemBlueprintId.trim() !== '';
+    const searchType = isSpecificBlueprint ? 'single-blueprint' : 'cross-blueprint';
+
     logger.logButtonClick('System Search', 'ToolsPage', { 
       searchValue: systemSearchValue, 
-      searchType: 'cross-blueprint'
+      searchType,
+      blueprintId: systemBlueprintId || 'all'
     });
     logger.logWorkflowStart('System Search', {
       searchTerm: systemSearchValue,
+      searchType,
+      blueprintId: systemBlueprintId,
       timestamp: new Date().toISOString()
     });
     
     setIsSearching(true);
     setSearchResults([]);
-    setFoundSystemInfo(null);
     
     try {
-      console.log('Searching for system across all blueprints:', systemSearchValue);
-      
-      // Search across all blueprints
-      const foundSystem = await apstraApiService.searchSystemAcrossBlueprints(systemSearchValue, blueprints);
-      
-      if (foundSystem) {
-        setSearchResults(foundSystem.response.items || []);
+      let allResults: Array<{
+        blueprintId: string;
+        blueprintLabel: string;
+        pod: string;
+        rack: string;
+        nodeId: string;
+        apstraUrl: string;
+        searchResults: any[];
+      }> = [];
+
+      if (isSpecificBlueprint) {
+        // Search in specific blueprint selected by user
+        const selectedBlueprint = blueprints.find(bp => bp.id === systemBlueprintId);
+        if (!selectedBlueprint) {
+          alert('Selected blueprint not found. Please select a valid blueprint.');
+          return;
+        }
+
+        console.log('Searching for system in specific blueprint:', selectedBlueprint.label);
         
-        // Extract system information for display
-        const systemItem = foundSystem.response.items[0];
-        const extractSystemInfo = (item: any) => {
-          // Extract pod and rack information from system data
-          let pod = '';
-          let rack = '';
-          let nodeId = '';
-          
-          if (item.system) {
-            // Try to extract pod and rack from system properties
-            pod = item.system.pod || item.pod || '';
-            rack = item.system.rack || item.rack || '';
-            nodeId = item.system.id || item.id || '';
-          }
-          
-          return { pod, rack, nodeId };
-        };
+        const response = await apstraApiService.searchSystems(systemBlueprintId, systemSearchValue);
         
-        const { pod, rack, nodeId } = extractSystemInfo(systemItem);
-        
-        // Get Apstra host from the current configuration
-        const apstraHost = apstraApiService.getHost() || '10.85.192.59';
-        const apstraUrl = nodeId ? 
-          `https://${apstraHost}/#/blueprints/${foundSystem.blueprintId}/staged/physical/selection/node-preview/${nodeId}` 
-          : '';
-        
-        const systemInfo = {
-          blueprintId: foundSystem.blueprintId,
-          blueprintLabel: foundSystem.blueprintLabel,
-          pod,
-          rack,
-          nodeId,
-          apstraUrl
-        };
-        
-        setFoundSystemInfo(systemInfo);
-        
-        // Auto-select the found blueprint
-        setSystemBlueprintId(foundSystem.blueprintId);
-        setSystemBlueprintLabel(foundSystem.blueprintLabel);
-        
-        logger.logWorkflowComplete('System Search', {
-          status: 'completed',
-          searchTerm: systemSearchValue,
-          blueprintId: foundSystem.blueprintId,
-          blueprintLabel: foundSystem.blueprintLabel,
-          resultsFound: foundSystem.response.count,
-          systemInfo
-        });
-        
-        console.log('System found in blueprint:', foundSystem.blueprintLabel);
-        console.log('System info:', systemInfo);
-        console.log('Search results:', foundSystem.response.items);
-        
+        if (response.count > 0) {
+          // Process results from this blueprint
+          response.items.forEach((item: any) => {
+            const extractedInfo = extractSystemInfo(item);
+            const apstraHost = apstraApiService.getHost() || '10.85.192.59';
+            const apstraUrl = extractedInfo.nodeId ? 
+              `https://${apstraHost}/#/blueprints/${systemBlueprintId}/staged/physical/selection/node-preview/${extractedInfo.nodeId}` 
+              : '';
+
+            allResults.push({
+              blueprintId: systemBlueprintId,
+              blueprintLabel: selectedBlueprint.label,
+              pod: extractedInfo.pod,
+              rack: extractedInfo.rack,
+              nodeId: extractedInfo.nodeId,
+              apstraUrl,
+              searchResults: [item]
+            });
+          });
+        }
       } else {
-        // System not found in any blueprint
-        setFoundSystemInfo(null);
-        setSystemBlueprintId('');
+        // Search across all blueprints
+        console.log('Searching for system across all blueprints');
         
-        logger.logWorkflowComplete('System Search', {
-          status: 'not_found',
-          searchTerm: systemSearchValue,
-          searched_blueprints: blueprints.length
-        });
-        
-        alert(`System "${systemSearchValue}" not found in any blueprint.`);
+        for (const blueprint of blueprints) {
+          try {
+            const response = await apstraApiService.searchSystems(blueprint.id, systemSearchValue);
+            
+            if (response.count > 0) {
+              // Process results from this blueprint
+              response.items.forEach((item: any) => {
+                const extractedInfo = extractSystemInfo(item);
+                const apstraHost = apstraApiService.getHost() || '10.85.192.59';
+                const apstraUrl = extractedInfo.nodeId ? 
+                  `https://${apstraHost}/#/blueprints/${blueprint.id}/staged/physical/selection/node-preview/${extractedInfo.nodeId}` 
+                  : '';
+
+                allResults.push({
+                  blueprintId: blueprint.id,
+                  blueprintLabel: blueprint.label,
+                  pod: extractedInfo.pod,
+                  rack: extractedInfo.rack,
+                  nodeId: extractedInfo.nodeId,
+                  apstraUrl,
+                  searchResults: [item]
+                });
+              });
+            }
+          } catch (error) {
+            console.warn(`Search failed for blueprint ${blueprint.label}:`, error);
+          }
+        }
       }
+
+      // Set combined results
+      setSearchResults(allResults);
+      
+      logger.logWorkflowComplete('System Search', {
+        status: allResults.length > 0 ? 'completed' : 'not_found',
+        searchTerm: systemSearchValue,
+        searchType,
+        resultsFound: allResults.length,
+        blueprintsSearched: isSpecificBlueprint ? 1 : blueprints.length
+      });
+      
+      if (allResults.length === 0) {
+        const searchScope = isSpecificBlueprint ? 'selected blueprint' : 'any blueprint';
+        alert(`System "${systemSearchValue}" not found in ${searchScope}.`);
+      }
+      
     } catch (error: any) {
       console.error('System search failed:', error);
       logger.logError('API_CALL', 'System search failed', {
         searchTerm: systemSearchValue,
+        searchType,
         error: error.toString()
       });
       
@@ -169,6 +185,27 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const extractSystemInfo = (item: any) => {
+    // Extract pod and rack information from system data
+    let pod = '';
+    let rack = '';
+    let nodeId = '';
+    
+    if (item.system) {
+      // Try to extract pod and rack from system properties
+      pod = item.system.pod || item.pod || '';
+      rack = item.system.rack || item.rack || '';
+      nodeId = item.system.id || item.id || '';
+    } else {
+      // Fallback: try direct properties
+      pod = item.pod || '';
+      rack = item.rack || '';
+      nodeId = item.id || '';
+    }
+    
+    return { pod, rack, nodeId };
   };
 
   const handleIpSearch = async () => {
@@ -304,48 +341,64 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               </div>
             )}
           </div>
-          {foundSystemInfo && (
-            <div className="system-info-display">
-              <h4>System Found! 🎯</h4>
-              <div className="system-info-grid">
-                <div className="info-item">
-                  <label>Blueprint:</label>
-                  <span className="info-value">{foundSystemInfo.blueprintLabel}</span>
-                </div>
-                {foundSystemInfo.pod && (
-                  <div className="info-item">
-                    <label>Pod:</label>
-                    <span className="info-value">{foundSystemInfo.pod}</span>
-                  </div>
-                )}
-                {foundSystemInfo.rack && (
-                  <div className="info-item">
-                    <label>Rack:</label>
-                    <span className="info-value">{foundSystemInfo.rack}</span>
-                  </div>
-                )}
-                {foundSystemInfo.apstraUrl && (
-                  <div className="info-item">
-                    <label>Apstra URL:</label>
-                    <a 
-                      href={foundSystemInfo.apstraUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="apstra-link"
-                    >
-                      Open in Apstra 🔗
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
           {searchResults.length > 0 && (
-            <div className="search-results">
-              <h4>Search Results ({searchResults.length}):</h4>
-              <pre className="results-display">
-                {JSON.stringify(searchResults, null, 2)}
-              </pre>
+            <div className="search-results-table">
+              <h4>System Search Results ({searchResults.length})</h4>
+              <div className="results-table-container">
+                <table className="results-table">
+                  <thead>
+                    <tr>
+                      <th>Blueprint</th>
+                      <th>Pod</th>
+                      <th>Rack</th>
+                      <th>Apstra URL</th>
+                      <th>Search Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchResults.map((result, index) => (
+                      <tr key={`${result.blueprintId}-${result.nodeId}-${index}`}>
+                        <td className="blueprint-name">
+                          {result.blueprintLabel}
+                        </td>
+                        <td className="pod-name">
+                          {result.pod || '-'}
+                        </td>
+                        <td className="rack-name">
+                          {result.rack || '-'}
+                        </td>
+                        <td className="apstra-url">
+                          {result.apstraUrl ? (
+                            <a 
+                              href={result.apstraUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="url-link"
+                              title="Open in Apstra"
+                            >
+                              🔗 Open
+                            </a>
+                          ) : (
+                            <span className="no-url">-</span>
+                          )}
+                        </td>
+                        <td className="search-result">
+                          <button 
+                            className="result-details-btn"
+                            onClick={() => {
+                              console.log('Search result details:', result.searchResults);
+                              alert('Search result details logged to console');
+                            }}
+                            title="View detailed search results"
+                          >
+                            📋 Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>

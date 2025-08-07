@@ -488,6 +488,123 @@
   transform: translateY(0);
 }
 
+/* Search Results Table */
+.search-results-table {
+  margin: 16px 0;
+}
+
+.search-results-table h4 {
+  margin: 0 0 12px 0;
+  color: #2e7d32;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.results-table-container {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.results-table thead {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.results-table th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.results-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.results-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.results-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.results-table td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.blueprint-name {
+  font-weight: 500;
+  color: #007bff;
+  max-width: 150px;
+  word-break: break-word;
+}
+
+.pod-name, .rack-name {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #6c757d;
+  font-size: 0.85rem;
+}
+
+.apstra-url {
+  text-align: center;
+  width: 80px;
+}
+
+.url-link {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #007bff;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  transition: all 0.2s ease;
+}
+
+.url-link:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.no-url {
+  color: #adb5bd;
+  font-style: italic;
+}
+
+.search-result {
+  text-align: center;
+  width: 100px;
+}
+
+.result-details-btn {
+  padding: 4px 8px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.result-details-btn:hover {
+  background: #1e7e34;
+  transform: translateY(-1px);
+}
+
 @media (max-width: 768px) {
   .system-info-grid {
     grid-template-columns: 1fr;
@@ -500,5 +617,23 @@
   
   .apstra-link {
     justify-content: center;
+  }
+  
+  .results-table-container {
+    overflow-x: auto;
+  }
+  
+  .results-table {
+    min-width: 600px;
+  }
+  
+  .results-table th,
+  .results-table td {
+    padding: 8px 6px;
+    font-size: 0.85rem;
+  }
+  
+  .blueprint-name {
+    max-width: 120px;
   }
 }
