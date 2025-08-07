@@ -6,10 +6,13 @@ import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigMa
 import ProvisioningPage from './components/ProvisioningPage/ProvisioningPage';
 import ToolsPage from './components/ToolsPage/ToolsPage';
 import { AuthProvider } from './contexts/AuthContext';
+import { useAuthStatus } from './hooks/useAuthStatus';
 import { logger } from './services/LoggingService';
 import './App.css';
 
-function App() {
+// Main App Content Component (inside AuthProvider)
+function AppContent() {
+  const { isAuthenticated } = useAuthStatus();
   
   // Configuration states
   const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
@@ -126,8 +129,7 @@ function App() {
   };
 
   return (
-    <AuthProvider>
-      <div className="app">
+    <div className="app">
       <header className="app-header">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Apstra Provisioning Tool</h1>
@@ -138,7 +140,16 @@ function App() {
                 setShowApstraConfigManager(true);
                 logger.logWorkflowStart('Apstra Connection Configuration', { trigger: 'header_button' });
               }}
-              style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+              style={{ 
+                padding: '10px 20px', 
+                backgroundColor: isAuthenticated ? '#28a745' : '#dc3545',
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                animation: isAuthenticated ? 'none' : 'uncomfortable-pulse 2s infinite',
+                transition: 'all 0.3s ease'
+              }}
             >
               1. Apstra Connection
             </button>
@@ -219,14 +230,15 @@ function App() {
                 backgroundColor: 'white', 
                 padding: '20px', 
                 borderRadius: '8px', 
-                border: '2px solid #28a745', 
+                border: `2px solid ${isAuthenticated ? '#28a745' : '#dc3545'}`, 
                 minWidth: '200px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                animation: isAuthenticated ? 'none' : 'uncomfortable-pulse 2s infinite'
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8fff9';
+                e.currentTarget.style.backgroundColor = isAuthenticated ? '#f8fff9' : '#fff8f8';
                 e.currentTarget.style.transform = 'translateY(-2px)';
                 e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
               }}
@@ -236,7 +248,7 @@ function App() {
                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
               }}
             >
-              <h3 style={{ color: '#28a745', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ color: isAuthenticated ? '#28a745' : '#dc3545', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 1. Apstra Connection
                 <span style={{ fontSize: '1.2rem' }}>→</span>
               </h3>
@@ -374,6 +386,14 @@ function App() {
         onNavigate={handleNavigation}
       />
       </div>
+  );
+}
+
+// Main App Component
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 }
