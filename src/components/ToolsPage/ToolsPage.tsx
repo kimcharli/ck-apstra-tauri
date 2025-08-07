@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/tauri';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import { logger } from '../../services/LoggingService';
 import { apstraApiService } from '../../services/ApstraApiService';
-import { ApstraConfig } from '../../types/apstraConfig';
 import './ToolsPage.css';
 
 interface ToolsPageProps {
@@ -28,7 +26,6 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   const [ipBlueprintLabel, setIpBlueprintLabel] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [blueprints] = useState<Blueprint[]>([
     { label: 'DH50-Colo1', id: '32f27ec4-c6bf-4f2e-a00a-8cd7f674f369' },
@@ -37,79 +34,34 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
     { label: 'DH4-Colo2', id: '9059ee6c-5ac2-4fee-bd65-83d429ccf850' }
   ]);
 
-  // Check authentication and load config on component mount
+  // Check authentication status on component mount and when it becomes visible
   useEffect(() => {
-    checkAuthenticationStatus();
+    if (isVisible) {
+      checkAuthenticationStatus();
+    }
     setSystemBlueprintId(blueprints[0]?.id || ''); // Default to first blueprint
-  }, []);
+  }, [isVisible]);
 
   const checkAuthenticationStatus = async () => {
     try {
       const authStatus = await apstraApiService.checkAuthentication();
       setIsAuthenticated(authStatus);
-      if (!authStatus) {
-        await authenticateWithApstra();
-      }
+      // Don't auto-authenticate here - let user go to Apstra Connection page
     } catch (error: any) {
       console.error('Failed to check authentication:', error);
       setIsAuthenticated(false);
     }
   };
 
-  const authenticateWithApstra = async () => {
-    setIsAuthenticating(true);
-    try {
-      // Load user's Apstra config
-      const config = await invoke<ApstraConfig>('load_user_apstra_config');
-      
-      if (!config) {
-        throw new Error('No Apstra configuration found. Please configure Apstra settings first.');
-      }
-
-      // Construct base URL
-      const protocol = config.use_ssl !== false ? 'https' : 'http';
-      const baseUrl = `${protocol}://${config.host}:${config.port}`;
-
-      logger.logWorkflowStart('Apstra Authentication', {
-        host: config.host,
-        port: config.port,
-        username: config.username,
-        timestamp: new Date().toISOString()
-      });
-
-      // Attempt login
-      await apstraApiService.login(baseUrl, config.username, config.password);
-      setIsAuthenticated(true);
-      
-      logger.logWorkflowComplete('Apstra Authentication', {
-        status: 'success',
-        sessionId: apstraApiService.getSessionId()
-      });
-
-    } catch (error: any) {
-      logger.logError('API_CALL', 'Apstra authentication failed', {
-        error: error.toString()
-      });
-      console.error('Authentication failed:', error);
-      setIsAuthenticated(false);
-      
-      // Show user-friendly error message
-      alert(`Failed to connect to Apstra: ${error.message || error}. Please check your Apstra configuration.`);
-    } finally {
-      setIsAuthenticating(false);
-    }
-  };
 
   const handleSystemSearch = async () => {
     if (!systemSearchValue.trim()) return;
     
     // Check if authenticated
     if (!isAuthenticated) {
-      alert('Not authenticated with Apstra. Attempting to reconnect...');
-      await authenticateWithApstra();
-      if (!isAuthenticated) {
-        return;
-      }
+      alert('Not authenticated with Apstra. Please go to Apstra Connection page and connect first.');
+      onNavigate('apstra-connection');
+      return;
     }
 
     // Determine blueprint ID to use
@@ -180,9 +132,9 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
       
       // Handle specific error cases
       if (error.message?.includes('Not authenticated')) {
-        alert('Authentication expired. Please try again.');
+        alert('Authentication expired. Please go to Apstra Connection page and reconnect.');
         setIsAuthenticated(false);
-        await authenticateWithApstra();
+        onNavigate('apstra-connection');
       } else if (error.message?.includes('Blueprint not found')) {
         alert(`Blueprint not found. Please check the blueprint ID: ${blueprintId}`);
       } else {
@@ -262,15 +214,28 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
         title="Apstra Tools"
       />
       
-      <div className="tools-content">
-        {/* System Search Section */}
-        <section className="search-section">
-          <h2>System Search {isAuthenticated ? '✅' : '❌'}</h2>
-          {isAuthenticating && (
-            <div className="auth-status">
-              <span>🔄 Authenticating with Apstra...</span>
+      <div className={`tools-content ${!isAuthenticated ? 'not-authenticated' : ''}`}>
+        {!isAuthenticated && (
+          <div className="auth-required-banner">
+            <div className="auth-banner-content">
+              <span className="auth-warning-icon">⚠️</span>
+              <div className="auth-message">
+                <h3>Apstra Connection Required</h3>
+                <p>Please authenticate with Apstra before using these tools.</p>
+                <button 
+                  className="connect-now-button"
+                  onClick={() => onNavigate('apstra-connection')}
+                >
+                  Go to Apstra Connection
+                </button>
+              </div>
             </div>
-          )}
+          </div>
+        )}
+        
+        {/* System Search Section */}
+        <section className={`search-section ${!isAuthenticated ? 'disabled' : ''}`}>
+          <h2>System Search {isAuthenticated ? '✅' : '❌'}</h2>
           <div className="search-form">
             <div className="search-inputs">
               <input
@@ -301,13 +266,13 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               />
               <button 
                 onClick={handleSystemSearch}
-                disabled={isSearching || !systemSearchValue.trim() || isAuthenticating}
+                disabled={isSearching || !systemSearchValue.trim()}
                 className="search-button"
               >
                 {isSearching ? 'Searching...' : 'Search'}
               </button>
             </div>
-            {!isAuthenticated && !isAuthenticating && (
+            {!isAuthenticated && (
               <div className="auth-warning">
                 ⚠️ Not authenticated with Apstra. Configure Apstra settings first.
               </div>
@@ -324,8 +289,8 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
         </section>
 
         {/* IP Search Section */}
-        <section className="search-section">
-          <h2>IP Search</h2>
+        <section className={`search-section ${!isAuthenticated ? 'disabled' : ''}`}>
+          <h2>IP Search {isAuthenticated ? '✅' : '❌'}</h2>
           <div className="search-form">
             <div className="search-inputs">
               <input
@@ -354,7 +319,7 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
         </section>
 
         {/* Blueprints Table Section */}
-        <section className="blueprints-section">
+        <section className={`blueprints-section ${!isAuthenticated ? 'disabled' : ''}`}>
           <div className="blueprints-header">
             <h3>
               <span className="blueprints-icon">📋</span>

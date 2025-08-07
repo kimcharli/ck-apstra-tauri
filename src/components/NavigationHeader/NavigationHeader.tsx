@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { save } from '@tauri-apps/api/dialog';
 import { writeTextFile } from '@tauri-apps/api/fs';
 import { logger } from '../../services/LoggingService';
+import { apstraApiService } from '../../services/ApstraApiService';
 import './NavigationHeader.css';
 
 interface NavigationHeaderProps {
@@ -21,6 +22,25 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   const [isConnectionAlive, setIsConnectionAlive] = useState<boolean | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isDownloadingLogs, setIsDownloadingLogs] = useState(false);
+  const [isApstraAuthenticated, setIsApstraAuthenticated] = useState(false);
+
+  // Check Apstra authentication status periodically
+  useEffect(() => {
+    const checkApstraAuth = async () => {
+      try {
+        const authStatus = await apstraApiService.checkAuthentication();
+        setIsApstraAuthenticated(authStatus);
+      } catch (error) {
+        setIsApstraAuthenticated(false);
+      }
+    };
+
+    checkApstraAuth();
+    
+    // Check every 30 seconds
+    const interval = setInterval(checkApstraAuth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleNavigation = (page: typeof currentPage) => {
     logger.logNavigation(currentPage, page, 'navigation_button');
@@ -117,9 +137,9 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         <div className="nav-buttons">
           <button 
             onClick={() => handleNavigation('apstra-connection')}
-            className={`nav-btn ${currentPage === 'apstra-connection' ? 'active' : ''}`}
+            className={`nav-btn ${currentPage === 'apstra-connection' ? 'active' : ''} ${isApstraAuthenticated ? 'authenticated' : ''}`}
           >
-            1. Apstra Connection
+            {isApstraAuthenticated ? '✅ 1. Apstra Connection' : '1. Apstra Connection'}
           </button>
           <button 
             onClick={() => handleNavigation('conversion-map')}

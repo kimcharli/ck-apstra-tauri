@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { open, save } from '@tauri-apps/api/dialog';
 import { ApstraConfig, ApstraConfigUIState } from '../../types';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
+import { apstraApiService } from '../../services/ApstraApiService';
 import './ApstraConfigManager.css';
 
 interface ApstraConfigManagerProps {
@@ -28,6 +29,9 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     validationErrors: []
   });
 
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   const [formData, setFormData] = useState<ApstraConfig>({
     host: '',
     port: 443,
@@ -45,7 +49,19 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     if (isVisible && !state.currentConfig) {
       loadDefaultConfig();
     }
+    // Check authentication status when component mounts
+    checkAuthenticationStatus();
   }, [isVisible]);
+
+  const checkAuthenticationStatus = async () => {
+    try {
+      const authStatus = await apstraApiService.checkAuthentication();
+      setIsAuthenticated(authStatus);
+    } catch (error) {
+      console.error('Failed to check authentication:', error);
+      setIsAuthenticated(false);
+    }
+  };
 
   useEffect(() => {
     if (currentConfig) {
@@ -86,6 +102,14 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     if (state.validationErrors.length > 0) {
       setState(prev => ({ ...prev, validationErrors: [], connectionStatus: 'unknown' }));
     }
+
+    // If connection-related fields change, invalidate authentication
+    if (['host', 'port', 'username', 'password', 'use_ssl'].includes(field as string) && isAuthenticated) {
+      setIsAuthenticated(false);
+      setState(prev => ({ ...prev, connectionStatus: 'unknown' }));
+      apstraApiService.logout(); // Clear the session
+      console.log(`Apstra configuration field '${field}' changed. Authentication invalidated.`);
+    }
   };
 
   const validateConfig = (): boolean => {
@@ -109,6 +133,49 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
 
     setState(prev => ({ ...prev, validationErrors: errors }));
     return errors.length === 0;
+  };
+
+  const connectToApstra = async () => {
+    if (!validateConfig()) return;
+
+    setIsConnecting(true);
+    setIsAuthenticated(false);
+
+    try {
+      // First save the configuration
+      await saveToUserConfig();
+
+      // Construct base URL
+      const protocol = formData.use_ssl !== false ? 'https' : 'http';
+      const baseUrl = `${protocol}://${formData.host}:${formData.port}`;
+
+      console.log('Authenticating with Apstra:', formData.host);
+
+      // Attempt authentication
+      const loginResult = await apstraApiService.login(baseUrl, formData.username, formData.password);
+      
+      setIsAuthenticated(true);
+      setState(prev => ({ 
+        ...prev, 
+        connectionStatus: 'success',
+        validationErrors: []
+      }));
+
+      console.log('Successfully authenticated with Apstra. Session ID:', loginResult.session_id);
+      alert('Successfully connected to Apstra! You can now use the Tools page.');
+      
+    } catch (error: any) {
+      console.error('Authentication failed:', error);
+      setIsAuthenticated(false);
+      setState(prev => ({ 
+        ...prev, 
+        connectionStatus: 'failed',
+        validationErrors: [`Authentication failed: ${error.message || error}`]
+      }));
+      alert(`Failed to connect to Apstra: ${error.message || error}`);
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   const testConnection = async () => {
@@ -370,9 +437,16 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
         <div className="apstra-config-actions">
           <div className="action-group">
             <button
+              onClick={connectToApstra}
+              disabled={isConnecting || state.isLoading}
+              className={`connect-button ${isAuthenticated ? 'connected' : ''}`}
+            >
+              {isConnecting ? 'Connecting...' : isAuthenticated ? '✅ Connected' : 'Connect to Apstra'}
+            </button>
+            <button
               onClick={testConnection}
-              disabled={state.isTestingConnection || state.isLoading}
-              className="test-button"
+              disabled={state.isTestingConnection || state.isLoading || isConnecting}
+              className="test-button secondary"
             >
               {state.isTestingConnection ? 'Testing...' : 'Test Connection'}
             </button>
