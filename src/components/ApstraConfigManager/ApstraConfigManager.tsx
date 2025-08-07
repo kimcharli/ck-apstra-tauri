@@ -279,108 +279,136 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
                 <div className="form-section">
                   <h3>Connection Settings</h3>
                   
-                  <div className="form-group">
-                    <label htmlFor="host">Apstra Host</label>
-                    <input
-                      id="host"
-                      type="text"
-                      value={formData.host}
-                      onChange={(e) => handleFieldChange('host', e.target.value)}
-                      placeholder="10.85.192.59"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="port">Port</label>
-                    <input
-                      id="port"
-                      type="number"
-                      value={formData.port}
-                      onChange={(e) => handleFieldChange('port', parseInt(e.target.value) || 443)}
-                      min="1"
-                      max="65535"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="username">Username</label>
-                    <input
-                      id="username"
-                      type="text"
-                      value={formData.username}
-                      onChange={(e) => handleFieldChange('username', e.target.value)}
-                      placeholder="admin"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="password">Password</label>
-                    <div className="password-input-group">
-                      <input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        value={formData.password}
-                        onChange={(e) => handleFieldChange('password', e.target.value)}
-                        placeholder="Enter password"
-                      />
-                      <button
-                        type="button"
-                        className="password-toggle"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? '👁️' : '👁️‍🗨️'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="blueprint">Blueprint Name</label>
-                    <input
-                      id="blueprint"
-                      type="text"
-                      value={formData.blueprint_name}
-                      onChange={(e) => handleFieldChange('blueprint_name', e.target.value)}
-                      placeholder="terra"
-                    />
-                  </div>
+                  <table className="config-table">
+                    <tbody>
+                      <tr>
+                        <td className="field-label">
+                          <label htmlFor="host">Apstra Host:</label>
+                        </td>
+                        <td className="field-input">
+                          <input
+                            id="host"
+                            type="text"
+                            value={formData.host}
+                            onChange={(e) => handleFieldChange('host', e.target.value)}
+                            placeholder="10.85.192.59"
+                          />
+                        </td>
+                        <td className="field-label">
+                          <label htmlFor="port">Port:</label>
+                        </td>
+                        <td className="field-input">
+                          <input
+                            id="port"
+                            type="number"
+                            value={formData.port}
+                            onChange={(e) => handleFieldChange('port', parseInt(e.target.value) || 443)}
+                            min="1"
+                            max="65535"
+                          />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="field-label">
+                          <label htmlFor="username">Username:</label>
+                        </td>
+                        <td className="field-input">
+                          <input
+                            id="username"
+                            type="text"
+                            value={formData.username}
+                            onChange={(e) => handleFieldChange('username', e.target.value)}
+                            placeholder="admin"
+                          />
+                        </td>
+                        <td className="field-label">
+                          <label htmlFor="password">Password:</label>
+                        </td>
+                        <td className="field-input">
+                          <div className="password-input-group">
+                            <input
+                              id="password"
+                              type={showPassword ? "text" : "password"}
+                              value={formData.password}
+                              onChange={(e) => handleFieldChange('password', e.target.value)}
+                              placeholder="Enter password"
+                            />
+                            <button
+                              type="button"
+                              className="password-toggle"
+                              onClick={() => setShowPassword(!showPassword)}
+                            >
+                              {showPassword ? '👁️' : '👁️‍🗨️'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="field-label">
+                          <label htmlFor="blueprint">Blueprint:</label>
+                        </td>
+                        <td className="field-input" colSpan={3}>
+                          <input
+                            id="blueprint"
+                            type="text"
+                            value={formData.blueprint_name}
+                            onChange={(e) => handleFieldChange('blueprint_name', e.target.value)}
+                            placeholder="terra"
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div className="form-section">
                   <h3>Advanced Settings</h3>
                   
-                  <div className="form-group checkbox-group">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={formData.use_ssl ?? true}
-                        onChange={(e) => handleFieldChange('use_ssl', e.target.checked)}
-                      />
-                      Use SSL/HTTPS
-                    </label>
-                  </div>
-
-                  <div className="form-group checkbox-group">
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={formData.verify_ssl ?? false}
-                        onChange={(e) => handleFieldChange('verify_ssl', e.target.checked)}
-                      />
-                      Verify SSL Certificate
-                    </label>
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="timeout">Timeout (seconds)</label>
-                    <input
-                      id="timeout"
-                      type="number"
-                      value={formData.timeout ?? 30}
-                      onChange={(e) => handleFieldChange('timeout', parseInt(e.target.value) || 30)}
-                      min="1"
-                      max="300"
-                    />
-                  </div>
+                  <table className="config-table">
+                    <tbody>
+                      <tr>
+                        <td className="field-label">SSL/HTTPS:</td>
+                        <td className="field-input">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={formData.use_ssl ?? true}
+                              onChange={(e) => handleFieldChange('use_ssl', e.target.checked)}
+                            />
+                            Use SSL/HTTPS
+                          </label>
+                        </td>
+                        <td className="field-label">SSL Verify:</td>
+                        <td className="field-input">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={formData.verify_ssl ?? false}
+                              onChange={(e) => handleFieldChange('verify_ssl', e.target.checked)}
+                            />
+                            Verify Certificate
+                          </label>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="field-label">
+                          <label htmlFor="timeout">Timeout:</label>
+                        </td>
+                        <td className="field-input">
+                          <input
+                            id="timeout"
+                            type="number"
+                            value={formData.timeout ?? 30}
+                            onChange={(e) => handleFieldChange('timeout', parseInt(e.target.value) || 30)}
+                            min="1"
+                            max="300"
+                          />
+                          <span className="field-unit">seconds</span>
+                        </td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
