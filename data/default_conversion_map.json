@@ -15,7 +15,6 @@
         "CTs": "link_group_ct_names",
         "Server Tags": "server_tags",
         "Link Tags": "link_tags",
-        "Blueprint": "blueprint",
         "Comments": "comment",
         "Notes": "comment"
     }

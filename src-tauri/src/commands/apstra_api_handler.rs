@@ -198,3 +198,39 @@ pub async fn apstra_logout(
     
     Ok(ApiResult::success(()))
 }
+
+/// Dump complete blueprint configuration
+#[tauri::command]
+pub async fn apstra_dump_blueprint(
+    session_id: String,
+    blueprint_id: String,
+    state: State<'_, ApiClientState>,
+) -> Result<ApiResult<serde_json::Value>, String> {
+    log::info!("Dumping blueprint configuration: {}", blueprint_id);
+    
+    let client = {
+        let clients = state.lock().map_err(|e| format!("Failed to acquire lock: {}", e))?;
+        
+        let client = clients
+            .get(&session_id)
+            .ok_or_else(|| "Session not found. Please login first.".to_string())?;
+        
+        if !client.is_authenticated() {
+            return Ok(ApiResult::error("Not authenticated. Please login first.".to_string()));
+        }
+        
+        client.clone()
+    }; // Release lock here
+    
+    match client.dump_blueprint(&blueprint_id).await {
+        Ok(blueprint_data) => {
+            log::info!("Blueprint dump completed for: {}", blueprint_id);
+            Ok(ApiResult::success(blueprint_data))
+        }
+        Err(e) => {
+            let error_msg = format!("Blueprint dump failed: {}", e);
+            log::error!("{}", error_msg);
+            Ok(ApiResult::error(error_msg))
+        }
+    }
+}

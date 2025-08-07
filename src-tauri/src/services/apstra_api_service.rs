@@ -163,6 +163,45 @@ impl ApstraApiClient {
     pub fn logout(&mut self) {
         self.auth_token = None;
     }
+
+    /// Dump complete blueprint configuration
+    pub async fn dump_blueprint(&self, blueprint_id: &str) -> Result<serde_json::Value, ApstraApiError> {
+        let auth_token = self.auth_token.as_ref().ok_or_else(|| {
+            ApstraApiError::Authentication {
+                message: "Not authenticated. Please login first.".to_string(),
+            }
+        })?;
+
+        let response = self
+            .client
+            .get(&format!("{}/api/blueprints/{}", self.base_url, blueprint_id))
+            .header("AuthToken", auth_token)
+            .send()
+            .await?;
+
+        match response.status() {
+            reqwest::StatusCode::OK => {
+                let blueprint_data: serde_json::Value = response.json().await?;
+                Ok(blueprint_data)
+            }
+            reqwest::StatusCode::NOT_FOUND => {
+                Err(ApstraApiError::BlueprintNotFound {
+                    blueprint_id: blueprint_id.to_string(),
+                })
+            }
+            reqwest::StatusCode::UNAUTHORIZED => {
+                Err(ApstraApiError::Authentication {
+                    message: "Authentication expired or invalid".to_string(),
+                })
+            }
+            _status => {
+                let error_text = response.text().await.unwrap_or_default();
+                Err(ApstraApiError::InvalidRequest {
+                    message: format!("Blueprint dump failed: {}", error_text),
+                })
+            }
+        }
+    }
 }
 
 #[cfg(test)]

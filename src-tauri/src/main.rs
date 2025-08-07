@@ -55,7 +55,8 @@ fn main() {
             apstra_search_systems,
             apstra_execute_query,
             apstra_is_authenticated,
-            apstra_logout
+            apstra_logout,
+            apstra_dump_blueprint
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

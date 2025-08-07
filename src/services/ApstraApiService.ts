@@ -213,10 +213,94 @@ export class ApstraApiService {
   }
 
   /**
+   * Search for systems with pod and rack information using graph query
+   */
+  public async searchSystemsWithTopology(blueprintId: string, serverName: string): Promise<QueryResponse> {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated. Please login first.');
+    }
+
+    // Graph query to get system with pod and rack information
+    const query = `match(
+      node('system', label='${serverName}', name='system')
+        .out().node('pod', name='pod'),
+      node(name='system')
+        .out().node('rack', name='rack')
+    )`;
+
+    return await this.executeQuery(blueprintId, query);
+  }
+
+  /**
+   * Search for IP addresses with system, pod and rack information using graph query
+   */
+  public async searchIPsWithTopology(blueprintId: string, ipAddress: string): Promise<QueryResponse> {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated. Please login first.');
+    }
+
+    // Graph query to get interface with IP and related system, pod, rack information
+    const query = `match(
+      node('interface', ipv4_addr='${ipAddress}', name='intf').in_().node('system', name='system')
+        .out().node('pod', name='pod'),
+      node(name='system').out().node('rack', name='rack')
+    )`;
+
+    return await this.executeQuery(blueprintId, query);
+  }
+
+  /**
+   * Dump complete blueprint JSON data using direct API call
+   */
+  public async dumpBlueprint(blueprintId: string): Promise<any> {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated. Please login first.');
+    }
+
+    try {
+      const result = await invoke<ApiResult<any>>('apstra_dump_blueprint', {
+        sessionId: this.sessionId,
+        blueprintId,
+      });
+      
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Blueprint dump failed');
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Helper method to create a system search query
    */
   public static createSystemQuery(serverName: string): string {
     return `match(node('system', label='${serverName}', name='system'))`;
+  }
+
+  /**
+   * Helper method to create a system search query with topology
+   */
+  public static createSystemWithTopologyQuery(serverName: string): string {
+    return `match(
+      node('system', label='${serverName}', name='system')
+        .out().node('pod', name='pod'),
+      node(name='system')
+        .out().node('rack', name='rack')
+    )`;
+  }
+
+  /**
+   * Helper method to create an IP search query with topology
+   */
+  public static createIPWithTopologyQuery(ipAddress: string): string {
+    return `match(
+      node('interface', ipv4_addr='${ipAddress}', name='intf').in_().node('system', name='system')
+        .out().node('pod', name='pod'),
+      node(name='system').out().node('rack', name='rack')
+    )`;
   }
 }
 

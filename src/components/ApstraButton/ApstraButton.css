@@ -1,0 +1,83 @@
+/* Base Apstra button styles */
+.apstra-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+  word-break: break-word;
+  color: white;
+}
+
+.apstra-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Blueprint button - Blue gradient */
+.apstra-btn-blueprint {
+  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+}
+
+.apstra-btn-blueprint:hover {
+  background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
+  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* System button - Green gradient */
+.apstra-btn-system {
+  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+}
+
+.apstra-btn-system:hover {
+  background: linear-gradient(135deg, #1e7e34 0%, #155724 100%);
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+/* Pod button - Orange gradient */
+.apstra-btn-pod {
+  background: linear-gradient(135deg, #fd7e14 0%, #dc6502 100%);
+}
+
+.apstra-btn-pod:hover {
+  background: linear-gradient(135deg, #dc6502 0%, #c85d00 100%);
+  box-shadow: 0 2px 8px rgba(253, 126, 20, 0.3);
+}
+
+/* Rack button - Purple gradient */
+.apstra-btn-rack {
+  background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+}
+
+.apstra-btn-rack:hover {
+  background: linear-gradient(135deg, #5a32a3 0%, #492a85 100%);
+  box-shadow: 0 2px 8px rgba(111, 66, 193, 0.3);
+}
+
+/* Interface button - Teal gradient */
+.apstra-btn-interface {
+  background: linear-gradient(135deg, #20c997 0%, #17a085 100%);
+}
+
+.apstra-btn-interface:hover {
+  background: linear-gradient(135deg, #17a085 0%, #138f73 100%);
+  box-shadow: 0 2px 8px rgba(32, 201, 151, 0.3);
+}
+
+/* No data placeholder */
+.no-data {
+  color: #adb5bd;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .apstra-btn {
+    min-width: 80px;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+}

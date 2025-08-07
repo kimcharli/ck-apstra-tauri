@@ -357,12 +357,43 @@
   text-decoration: underline;
 }
 
+.action-link:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .leafs-link {
   color: #007bff;
 }
 
 .dump-link {
-  color: #007bff;
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+  border: 1px solid #17a2b8;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.dump-link:hover:not(:disabled) {
+  background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+  border-color: #138496;
+  color: white;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(23, 162, 184, 0.3);
+}
+
+.dump-link:disabled {
+  background: #6c757d;
+  border-color: #6c757d;
+  color: white;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .action-separator {
@@ -545,67 +576,23 @@
   vertical-align: middle;
 }
 
-.blueprint-cell {
+.blueprint-cell,
+.pod-cell,
+.rack-cell,
+.system-cell,
+.interface-cell {
   text-align: center;
   width: 120px;
 }
 
-.blueprint-btn {
-  padding: 6px 12px;
-  background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 100px;
-  word-break: break-word;
-}
-
-.blueprint-btn:hover {
-  background: linear-gradient(135deg, #0056b3 0%, #004085 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-}
-
-.pod-name, .rack-name {
+.ip-address {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  color: #6c757d;
+  color: #495057;
   font-size: 0.85rem;
   text-align: center;
-}
-
-.system-cell {
-  text-align: center;
-  width: 120px;
-}
-
-.system-btn {
-  padding: 6px 12px;
-  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 100px;
-  word-break: break-word;
-}
-
-.system-btn:hover {
-  background: linear-gradient(135deg, #1e7e34 0%, #155724 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
-}
-
-.no-system {
-  color: #adb5bd;
-  font-style: italic;
-  font-size: 0.85rem;
+  background-color: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 3px;
 }
 
 .search-result {
@@ -657,13 +644,11 @@
     font-size: 0.85rem;
   }
   
-  .blueprint-btn, .system-btn {
-    min-width: 80px;
-    padding: 4px 8px;
-    font-size: 0.8rem;
-  }
-  
-  .blueprint-cell, .system-cell {
+  .blueprint-cell,
+  .pod-cell,
+  .rack-cell,
+  .system-cell,
+  .interface-cell {
     width: 90px;
   }
 }

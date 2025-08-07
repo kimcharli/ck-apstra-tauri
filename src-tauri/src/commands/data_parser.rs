@@ -76,6 +76,11 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
     log::info!("Found headers (original case): {:?}", headers);
     log::info!("Header row index: {}", header_row_idx);
     
+    // Add detailed debug logging for each header with byte representation
+    for (i, header) in headers.iter().enumerate() {
+        log::debug!("Header[{}]: '{}' (bytes: {:?})", i, header, header.as_bytes());
+    }
+    
     
     // Create field mapping using conversion map or default logic
     let field_map = if let Some(conv_map) = conversion_map {
@@ -114,7 +119,6 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     
     // Define possible header variations for each field
     let header_variations = vec![
-        ("blueprint", vec!["blueprint", "bp", "blueprint_name"]),
         ("server_label", vec!["server_label", "server", "server_name", "hostname"]),
         ("switch_label", vec!["switch_label", "switch", "switch_name", "device"]),
         ("switch_ifname", vec!["switch_ifname", "switch_interface", "switch_port", "port", "interface"]),
@@ -160,6 +164,7 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
     // Use conversion map to map Excel headers to target fields
     for header in headers {
         let normalized_header = normalize_header(header);
+        log::debug!("Processing header: '{}' -> normalized: '{}'", header, normalized_header);
         
         // Try exact match first (after normalization)
         let mut found = false;
@@ -170,7 +175,7 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
             
             if normalized_header == normalized_excel_header {
                 field_map.insert(target_field.clone(), header.clone());
-                log::debug!("Mapped '{}' -> '{}' (via normalized match)", header, target_field);
+                log::info!("✅ EXACT MATCH: '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
                 found = true;
                 break;
             }
@@ -183,10 +188,15 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
                 
                 if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
                     field_map.insert(target_field.clone(), header.clone());
-                    log::debug!("Mapped '{}' -> '{}' (via partial match)", header, target_field);
+                    log::info!("✅ PARTIAL MATCH: '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
+                    found = true;
                     break;
                 }
             }
+        }
+        
+        if !found {
+            log::warn!("❌ NO MATCH FOUND for header: '{}'", header);
         }
     }
     

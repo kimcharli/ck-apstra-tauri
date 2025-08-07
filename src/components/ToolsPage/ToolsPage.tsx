@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
+import ApstraButton from '../ApstraButton';
 import { logger } from '../../services/LoggingService';
 import { apstraApiService } from '../../services/ApstraApiService';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
+import { generateApstraUrls } from '../../utils/apstraUrls';
+import { downloadJSON, generateBlueprintDumpFilename } from '../../utils/fileDownload';
+import { save } from '@tauri-apps/api/dialog';
+import { writeTextFile } from '@tauri-apps/api/fs';
+import { downloadDir } from '@tauri-apps/api/path';
 import './ToolsPage.css';
 
 interface ToolsPageProps {
@@ -24,9 +30,11 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   const [systemBlueprintLabel, setSystemBlueprintLabel] = useState('');
   const [systemBlueprintId, setSystemBlueprintId] = useState('');
   const [ipSearchValue, setIpSearchValue] = useState('10.90.194.157/32');
-  const [ipBlueprintLabel, setIpBlueprintLabel] = useState('');
+  const [ipBlueprintId, setIpBlueprintId] = useState('');
+  const [ipSearchResults, setIpSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [dumpingBlueprintId, setDumpingBlueprintId] = useState<string | null>(null);
   
   // Use centralized authentication guard
   const { isAuthenticated } = useAuthStatus();
@@ -41,6 +49,7 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   useEffect(() => {
     if (isVisible) {
       setSystemBlueprintId(''); // Default to empty - 'Select Blueprint'
+      setIpBlueprintId(''); // Default to empty - 'Select Blueprint'
     }
   }, [isVisible]);
 
@@ -83,6 +92,8 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
         pod: string;
         rack: string;
         nodeId: string;
+        podId: string;
+        rackId: string;
         systemUrl: string;
         searchResults: any[];
       }> = [];
@@ -97,7 +108,7 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
 
         console.log('Searching for system in specific blueprint:', selectedBlueprint.label);
         
-        const response = await apstraApiService.searchSystems(systemBlueprintId, systemSearchValue);
+        const response = await apstraApiService.searchSystemsWithTopology(systemBlueprintId, systemSearchValue);
         
         if (response.count > 0) {
           // Process results from this blueprint
@@ -117,6 +128,8 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               pod: extractedInfo.pod,
               rack: extractedInfo.rack,
               nodeId: extractedInfo.nodeId,
+              podId: extractedInfo.podId,
+              rackId: extractedInfo.rackId,
               systemUrl,
               searchResults: [item]
             });
@@ -128,7 +141,7 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
         
         for (const blueprint of blueprints) {
           try {
-            const response = await apstraApiService.searchSystems(blueprint.id, systemSearchValue);
+            const response = await apstraApiService.searchSystemsWithTopology(blueprint.id, systemSearchValue);
             
             if (response.count > 0) {
               // Process results from this blueprint
@@ -148,6 +161,8 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                   pod: extractedInfo.pod,
                   rack: extractedInfo.rack,
                   nodeId: extractedInfo.nodeId,
+                  podId: extractedInfo.podId,
+                  rackId: extractedInfo.rackId,
                   systemUrl,
                   searchResults: [item]
                 });
@@ -196,72 +211,283 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
   };
 
   const extractSystemInfo = (item: any) => {
-    // Extract pod, rack, and system information from system data
+    // Extract pod, rack, and system information from graph query response
     let pod = '';
     let rack = '';
     let nodeId = '';
     let systemName = '';
+    let podId = '';
+    let rackId = '';
     
+    // Graph query response structure: named nodes (system, pod, rack)
     if (item.system) {
-      // Try to extract information from system properties
-      pod = item.system.pod || item.pod || '';
-      rack = item.system.rack || item.rack || '';
-      nodeId = item.system.id || item.id || '';
+      nodeId = item.system.id || '';
       systemName = item.system.hostname || item.system.label || item.system.name || '';
-    } else {
-      // Fallback: try direct properties
+    }
+    
+    if (item.pod) {
+      pod = item.pod.label || item.pod.name || '';
+      podId = item.pod.id || '';
+    }
+    
+    if (item.rack) {
+      rack = item.rack.label || item.rack.name || '';
+      rackId = item.rack.id || '';
+    }
+    
+    // Fallback to direct properties if named nodes not available
+    if (!pod && !rack && !nodeId) {
       pod = item.pod || '';
       rack = item.rack || '';
       nodeId = item.id || '';
       systemName = item.hostname || item.label || item.name || '';
     }
     
-    return { pod, rack, nodeId, systemName };
+    return { pod, rack, nodeId, systemName, podId, rackId };
+  };
+
+  const extractIPInfo = (item: any) => {
+    // Extract interface, system, pod, and rack information from graph query response
+    let interfaceId = '';
+    let interfaceName = '';
+    let interfaceIfName = '';
+    let interfaceIfType = '';
+    let ipAddress = '';
+    let systemName = '';
+    let systemId = '';
+    let pod = '';
+    let rack = '';
+    let podId = '';
+    let rackId = '';
+    
+    // Graph query response structure: named nodes (intf, system, pod, rack)
+    if (item.intf) {
+      interfaceId = item.intf.id || '';
+      interfaceName = item.intf.label || item.intf.name || '';
+      interfaceIfName = item.intf.if_name || '';
+      interfaceIfType = item.intf.if_type || '';
+      ipAddress = item.intf.ipv4_addr || '';
+    }
+    
+    if (item.system) {
+      systemId = item.system.id || '';
+      systemName = item.system.hostname || item.system.label || item.system.name || '';
+    }
+    
+    if (item.pod) {
+      pod = item.pod.label || item.pod.name || '';
+      podId = item.pod.id || '';
+    }
+    
+    if (item.rack) {
+      rack = item.rack.label || item.rack.name || '';
+      rackId = item.rack.id || '';
+    }
+    
+    return { interfaceId, interfaceName, interfaceIfName, interfaceIfType, ipAddress, systemName, systemId, pod, rack, podId, rackId };
+  };
+
+  const formatInterfaceLabel = (interfaceIfName: string, interfaceIfType: string, fallbackName: string) => {
+    // Create interface label from if_name and if_type
+    if (interfaceIfType) {
+      if (interfaceIfName) {
+        return `${interfaceIfName} (${interfaceIfType})`;
+      } else {
+        return interfaceIfType;
+      }
+    }
+    // Fallback to interface name or ID if if_type is not available
+    return fallbackName || 'Interface';
   };
 
   const handleIpSearch = async () => {
     if (!ipSearchValue.trim()) return;
     
+    // Check if authenticated
+    if (!isAuthenticated) {
+      alert('Not authenticated with Apstra. Please go to Apstra Connection page and connect first.');
+      onNavigate('apstra-connection');
+      return;
+    }
+
+    // Determine search strategy based on blueprint selection
+    const isSpecificBlueprint = ipBlueprintId.trim() !== '';
+    const searchType = isSpecificBlueprint ? 'single-blueprint' : 'cross-blueprint';
+
     logger.logButtonClick('IP Search', 'ToolsPage', { 
       searchValue: ipSearchValue, 
-      blueprintLabel: ipBlueprintLabel 
+      searchType,
+      blueprintId: ipBlueprintId || 'all'
     });
     logger.logWorkflowStart('IP Search', {
       searchTerm: ipSearchValue,
-      blueprint: ipBlueprintLabel,
+      searchType,
+      blueprintId: ipBlueprintId,
       timestamp: new Date().toISOString()
     });
     
     setIsSearching(true);
+    setIpSearchResults([]);
+    
     try {
-      // TODO: Implement actual IP search API call
-      console.log('Searching for IP:', ipSearchValue, 'in blueprint:', ipBlueprintLabel);
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      let allResults: Array<{
+        blueprintId: string;
+        blueprintLabel: string;
+        blueprintUrl: string;
+        interfaceId: string;
+        interfaceName: string;
+        interfaceIfName: string;
+        interfaceIfType: string;
+        ipAddress: string;
+        systemName: string;
+        systemId: string;
+        pod: string;
+        rack: string;
+        podId: string;
+        rackId: string;
+        interfaceUrl: string;
+        systemUrl: string;
+        searchResults: any[];
+      }> = [];
+
+      if (isSpecificBlueprint) {
+        // Search in specific blueprint selected by user
+        const selectedBlueprint = blueprints.find(bp => bp.id === ipBlueprintId);
+        if (!selectedBlueprint) {
+          alert('Selected blueprint not found. Please select a valid blueprint.');
+          return;
+        }
+
+        console.log('Searching for IP in specific blueprint:', selectedBlueprint.label);
+        
+        const response = await apstraApiService.searchIPsWithTopology(ipBlueprintId, ipSearchValue);
+        
+        if (response.count > 0) {
+          // Process results from this blueprint
+          response.items.forEach((item: any) => {
+            const extractedInfo = extractIPInfo(item);
+            const apstraHost = apstraApiService.getHost() || '10.85.192.59';
+            const blueprintUrl = generateApstraUrls.blueprint({ host: apstraHost, blueprintId: ipBlueprintId });
+            const interfaceUrl = extractedInfo.interfaceId ? 
+              generateApstraUrls.interface({ host: apstraHost, blueprintId: ipBlueprintId, nodeId: extractedInfo.interfaceId })
+              : '';
+            const systemUrl = extractedInfo.systemId ? 
+              generateApstraUrls.system({ host: apstraHost, blueprintId: ipBlueprintId, nodeId: extractedInfo.systemId })
+              : '';
+
+            allResults.push({
+              blueprintId: ipBlueprintId,
+              blueprintLabel: selectedBlueprint.label,
+              blueprintUrl,
+              interfaceId: extractedInfo.interfaceId,
+              interfaceName: extractedInfo.interfaceName,
+              interfaceIfName: extractedInfo.interfaceIfName,
+              interfaceIfType: extractedInfo.interfaceIfType,
+              ipAddress: extractedInfo.ipAddress || ipSearchValue,
+              systemName: extractedInfo.systemName,
+              systemId: extractedInfo.systemId,
+              pod: extractedInfo.pod,
+              rack: extractedInfo.rack,
+              podId: extractedInfo.podId,
+              rackId: extractedInfo.rackId,
+              interfaceUrl,
+              systemUrl,
+              searchResults: [item]
+            });
+          });
+        }
+      } else {
+        // Search across all blueprints
+        console.log('Searching for IP across all blueprints');
+        
+        for (const blueprint of blueprints) {
+          try {
+            const response = await apstraApiService.searchIPsWithTopology(blueprint.id, ipSearchValue);
+            
+            if (response.count > 0) {
+              // Process results from this blueprint
+              response.items.forEach((item: any) => {
+                const extractedInfo = extractIPInfo(item);
+                const apstraHost = apstraApiService.getHost() || '10.85.192.59';
+                const blueprintUrl = generateApstraUrls.blueprint({ host: apstraHost, blueprintId: blueprint.id });
+                const interfaceUrl = extractedInfo.interfaceId ? 
+                  generateApstraUrls.interface({ host: apstraHost, blueprintId: blueprint.id, nodeId: extractedInfo.interfaceId })
+                  : '';
+                const systemUrl = extractedInfo.systemId ? 
+                  generateApstraUrls.system({ host: apstraHost, blueprintId: blueprint.id, nodeId: extractedInfo.systemId })
+                  : '';
+
+                allResults.push({
+                  blueprintId: blueprint.id,
+                  blueprintLabel: blueprint.label,
+                  blueprintUrl,
+                  interfaceId: extractedInfo.interfaceId,
+                  interfaceName: extractedInfo.interfaceName,
+                  interfaceIfName: extractedInfo.interfaceIfName,
+                  interfaceIfType: extractedInfo.interfaceIfType,
+                  ipAddress: extractedInfo.ipAddress || ipSearchValue,
+                  systemName: extractedInfo.systemName,
+                  systemId: extractedInfo.systemId,
+                  pod: extractedInfo.pod,
+                  rack: extractedInfo.rack,
+                  podId: extractedInfo.podId,
+                  rackId: extractedInfo.rackId,
+                  interfaceUrl,
+                  systemUrl,
+                  searchResults: [item]
+                });
+              });
+            }
+          } catch (error) {
+            console.warn(`IP search failed for blueprint ${blueprint.label}:`, error);
+          }
+        }
+      }
+
+      // Set combined results
+      setIpSearchResults(allResults);
       
-      // Mock search results would be handled here
       logger.logWorkflowComplete('IP Search', {
-        status: 'completed',
+        status: allResults.length > 0 ? 'completed' : 'not_found',
         searchTerm: ipSearchValue,
-        blueprint: ipBlueprintLabel,
-        resultsFound: 'simulated'
+        searchType,
+        resultsFound: allResults.length,
+        blueprintsSearched: isSpecificBlueprint ? 1 : blueprints.length
       });
       
-      alert(`IP search completed for: ${ipSearchValue}`);
+      if (allResults.length === 0) {
+        const searchScope = isSpecificBlueprint ? 'selected blueprint' : 'any blueprint';
+        alert(`IP "${ipSearchValue}" not found in ${searchScope}.`);
+      }
+      
     } catch (error: any) {
       console.error('IP search failed:', error);
       logger.logError('API_CALL', 'IP search failed', {
         searchTerm: ipSearchValue,
-        blueprint: ipBlueprintLabel,
+        searchType,
         error: error.toString()
       });
-      alert('IP search failed');
+      
+      // Handle specific error cases
+      if (error.message?.includes('Not authenticated')) {
+        alert('Authentication expired. Please go to Apstra Connection page and reconnect.');
+        onNavigate('apstra-connection');
+      } else {
+        alert(`IP search failed: ${error.message || error}`);
+      }
     } finally {
       setIsSearching(false);
     }
   };
 
-  const handleBlueprintAction = (action: 'leafs' | 'dump', blueprint: Blueprint) => {
+  const handleBlueprintAction = async (action: 'leafs' | 'dump', blueprint: Blueprint) => {
+    // Check if authenticated
+    if (!isAuthenticated) {
+      alert('Not authenticated with Apstra. Please go to Apstra Connection page and connect first.');
+      onNavigate('apstra-connection');
+      return;
+    }
+
     logger.logButtonClick(`Blueprint ${action}`, 'ToolsPage', { 
       action, 
       blueprintLabel: blueprint.label, 
@@ -273,9 +499,103 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
       action: action,
       timestamp: new Date().toISOString()
     });
-    
-    console.log(`${action} action for blueprint:`, blueprint.label, blueprint.id);
-    alert(`${action.toUpperCase()} action triggered for ${blueprint.label}`);
+
+    if (action === 'dump') {
+      try {
+        setDumpingBlueprintId(blueprint.id); // Set specific blueprint as dumping
+        console.log(`Dumping blueprint data for: ${blueprint.label} (${blueprint.id})`);
+        
+        // Call the Apstra API to dump blueprint
+        const blueprintData = await apstraApiService.dumpBlueprint(blueprint.id);
+        
+        // Generate filename with timestamp
+        const filename = generateBlueprintDumpFilename(blueprint.label);
+        
+        // Use Tauri's native save dialog for better desktop integration
+        try {
+          // Get the default downloads directory
+          const downloadsPath = await downloadDir();
+          const defaultPath = `${downloadsPath}${filename}`;
+          
+          // Show save dialog
+          const filePath = await save({
+            title: 'Save Blueprint Dump',
+            defaultPath: defaultPath,
+            filters: [{
+              name: 'JSON Files',
+              extensions: ['json']
+            }, {
+              name: 'All Files', 
+              extensions: ['*']
+            }]
+          });
+          
+          if (filePath) {
+            // Convert data to JSON string
+            const jsonString = JSON.stringify(blueprintData, null, 2);
+            
+            // Write file using Tauri's file system API
+            await writeTextFile(filePath, jsonString);
+            
+            console.log(`Blueprint dump completed: ${filePath}`);
+            console.log('Downloaded data size:', JSON.stringify(blueprintData).length, 'characters');
+            alert(`Blueprint dump saved successfully!\n\nFile saved to: ${filePath}`);
+          } else {
+            console.log('User cancelled the save dialog');
+          }
+        } catch (downloadError) {
+          console.error('Tauri save failed, falling back to browser download:', downloadError);
+          
+          // Fallback to browser download method
+          try {
+            downloadJSON(blueprintData, filename);
+            console.log(`Blueprint dump completed with fallback: ${filename}`);
+            alert(`Blueprint dump completed!\n\nFile downloaded as: ${filename}`);
+          } catch (fallbackError) {
+            throw new Error(`Both Tauri and browser download methods failed: ${fallbackError}`);
+          }
+        }
+        
+        logger.logWorkflowComplete(`Blueprint ${action.toUpperCase()}`, {
+          status: 'completed',
+          blueprint: blueprint.label,
+          blueprintId: blueprint.id,
+          filename: filename,
+          dataSize: JSON.stringify(blueprintData).length,
+          method: 'real_api_call'
+        });
+        
+        
+      } catch (error: any) {
+        console.error('Blueprint dump failed:', error);
+        logger.logError('API_CALL', 'Blueprint dump failed', {
+          blueprint: blueprint.label,
+          blueprintId: blueprint.id,
+          action: action,
+          error: error.toString()
+        });
+        
+        // Handle specific error cases
+        if (error.message?.includes('Not authenticated')) {
+          alert('Authentication expired. Please go to Apstra Connection page and reconnect.');
+          onNavigate('apstra-connection');
+        } else {
+          alert(`Blueprint dump failed: ${error.message || error}`);
+        }
+      } finally {
+        setDumpingBlueprintId(null); // Clear the dumping state
+      }
+    } else {
+      // Handle other actions (leafs, etc.)
+      console.log(`${action} action for blueprint:`, blueprint.label, blueprint.id);
+      alert(`${action.toUpperCase()} action triggered for ${blueprint.label}`);
+      
+      logger.logWorkflowComplete(`Blueprint ${action.toUpperCase()}`, {
+        status: 'completed',
+        blueprint: blueprint.label,
+        blueprintId: blueprint.id
+      });
+    }
   };
 
   if (!isVisible) return null;
@@ -370,32 +690,40 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                     {searchResults.map((result, index) => (
                       <tr key={`${result.blueprintId}-${result.nodeId}-${index}`}>
                         <td className="blueprint-cell">
-                          <button
-                            className="blueprint-btn"
-                            onClick={() => window.open(result.blueprintUrl, '_blank')}
-                            title={`Open blueprint ${result.blueprintLabel} in Apstra`}
-                          >
-                            {result.blueprintLabel}
-                          </button>
+                          <ApstraButton
+                            type="blueprint"
+                            label={result.blueprintLabel}
+                            url={result.blueprintUrl}
+                          />
                         </td>
-                        <td className="pod-name">
-                          {result.pod || '-'}
+                        <td className="pod-cell">
+                          <ApstraButton
+                            type="pod"
+                            label={result.pod}
+                            url={generateApstraUrls.pod({
+                              host: apstraApiService.getHost() || '10.85.192.59',
+                              blueprintId: result.blueprintId,
+                              nodeId: result.podId
+                            })}
+                          />
                         </td>
-                        <td className="rack-name">
-                          {result.rack || '-'}
+                        <td className="rack-cell">
+                          <ApstraButton
+                            type="rack"
+                            label={result.rack}
+                            url={generateApstraUrls.rack({
+                              host: apstraApiService.getHost() || '10.85.192.59',
+                              blueprintId: result.blueprintId,
+                              nodeId: result.rackId
+                            })}
+                          />
                         </td>
                         <td className="system-cell">
-                          {result.systemUrl ? (
-                            <button
-                              className="system-btn"
-                              onClick={() => window.open(result.systemUrl, '_blank')}
-                              title={`Open system ${result.systemName} in Apstra`}
-                            >
-                              {result.systemName}
-                            </button>
-                          ) : (
-                            <span className="no-system">{result.systemName || '-'}</span>
-                          )}
+                          <ApstraButton
+                            type="system"
+                            label={result.systemName}
+                            url={result.systemUrl}
+                          />
                         </td>
                         <td className="search-result">
                           <button 
@@ -430,13 +758,18 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                 placeholder="Enter IP address/CIDR"
                 className="search-input ip-input"
               />
-              <input
-                type="text"
-                value={ipBlueprintLabel}
-                onChange={(e) => setIpBlueprintLabel(e.target.value)}
-                placeholder="Blueprint Label (Optional)"
-                className="search-input blueprint-input"
-              />
+              <select
+                value={ipBlueprintId}
+                onChange={(e) => setIpBlueprintId(e.target.value)}
+                className="search-input blueprint-select"
+              >
+                <option value="">Select Blueprint</option>
+                {blueprints.map(bp => (
+                  <option key={bp.id} value={bp.id}>
+                    {bp.label}
+                  </option>
+                ))}
+              </select>
               <button 
                 onClick={handleIpSearch}
                 disabled={isSearching || !ipSearchValue.trim()}
@@ -445,7 +778,100 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                 {isSearching ? 'Searching...' : 'Search'}
               </button>
             </div>
+            {!isAuthenticated && (
+              <div className="auth-warning">
+                ⚠️ Not authenticated with Apstra. Configure Apstra settings first.
+              </div>
+            )}
           </div>
+          {ipSearchResults.length > 0 && (
+            <div className="search-results-table">
+              <h4>IP Search Results ({ipSearchResults.length})</h4>
+              <div className="results-table-container">
+                <table className="results-table">
+                  <thead>
+                    <tr>
+                      <th>Blueprint</th>
+                      <th>Pod</th>
+                      <th>Rack</th>
+                      <th>System</th>
+                      <th>Interface</th>
+                      <th>IP Address</th>
+                      <th>Search Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ipSearchResults.map((result, index) => (
+                      <tr key={`${result.blueprintId}-${result.interfaceId}-${index}`}>
+                        <td className="blueprint-cell">
+                          <ApstraButton
+                            type="blueprint"
+                            label={result.blueprintLabel}
+                            url={result.blueprintUrl}
+                          />
+                        </td>
+                        <td className="pod-cell">
+                          <ApstraButton
+                            type="pod"
+                            label={result.pod}
+                            url={generateApstraUrls.pod({
+                              host: apstraApiService.getHost() || '10.85.192.59',
+                              blueprintId: result.blueprintId,
+                              nodeId: result.podId
+                            })}
+                          />
+                        </td>
+                        <td className="rack-cell">
+                          <ApstraButton
+                            type="rack"
+                            label={result.rack}
+                            url={generateApstraUrls.rack({
+                              host: apstraApiService.getHost() || '10.85.192.59',
+                              blueprintId: result.blueprintId,
+                              nodeId: result.rackId
+                            })}
+                          />
+                        </td>
+                        <td className="system-cell">
+                          <ApstraButton
+                            type="system"
+                            label={result.systemName}
+                            url={result.systemUrl}
+                          />
+                        </td>
+                        <td className="interface-cell">
+                          <ApstraButton
+                            type="interface"
+                            label={formatInterfaceLabel(
+                              result.interfaceIfName,
+                              result.interfaceIfType,
+                              result.interfaceName || result.interfaceId
+                            )}
+                            url={result.interfaceUrl}
+                          />
+                        </td>
+                        <td className="ip-address">
+                          {result.ipAddress}
+                        </td>
+                        <td className="search-result">
+                          <button 
+                            className="result-details-btn"
+                            onClick={() => {
+                              console.log('IP search result details:', result.searchResults);
+                              alert('IP search result details logged to console');
+                            }}
+                            title="View detailed search results"
+                          >
+                            📋 Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Blueprints Table Section */}
@@ -469,10 +895,15 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
               <tbody>
                 {blueprints.map((blueprint, index) => (
                   <tr key={blueprint.id} className={index % 2 === 0 ? 'even-row' : 'odd-row'}>
-                    <td>
-                      <a href="#" className="blueprint-link">
-                        {blueprint.label}
-                      </a>
+                    <td className="blueprint-cell">
+                      <ApstraButton
+                        type="blueprint"
+                        label={blueprint.label}
+                        url={generateApstraUrls.blueprint({
+                          host: apstraApiService.getHost() || '10.85.192.59',
+                          blueprintId: blueprint.id
+                        })}
+                      />
                     </td>
                     <td className="blueprint-id">{blueprint.id}</td>
                     <td className="blueprint-actions">
@@ -486,8 +917,10 @@ const ToolsPage: React.FC<ToolsPageProps> = ({
                       <button
                         onClick={() => handleBlueprintAction('dump', blueprint)}
                         className="action-link dump-link"
+                        disabled={dumpingBlueprintId === blueprint.id}
+                        title={`Download blueprint ${blueprint.label} configuration as JSON`}
                       >
-                        Dump
+                        {dumpingBlueprintId === blueprint.id ? '⏳ Dumping...' : '📁 Dump'}
                       </button>
                     </td>
                   </tr>
