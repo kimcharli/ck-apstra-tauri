@@ -1,19 +1,38 @@
 use tauri::command;
 use crate::models::network_config::NetworkConfigRow;
 use crate::models::conversion_map::ConversionMap;
+use crate::commands::send_backend_log;
 use calamine::{Reader, Xlsx, open_workbook, Range, DataType};
 use std::collections::HashMap;
 
 // Helper function to log to both Rust logging and frontend LoggingService
-async fn log_to_frontend(level: &str, message: &str, details: Option<serde_json::Value>) {
-    // This would need to be implemented to send logs to frontend
-    // For now, just use regular Rust logging
-    match level {
-        "error" => log::error!("{}", message),
-        "warn" => log::warn!("{}", message), 
-        "info" => log::info!("{}", message),
-        "debug" => log::debug!("{}", message),
-        _ => log::info!("{}", message),
+async fn log_debug_to_frontend(message: &str, details: Option<serde_json::Value>) {
+    // Log to Rust console
+    log::debug!("{}", message);
+    
+    // Also send to frontend logging service
+    if let Err(e) = send_backend_log("debug".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
+        log::warn!("Failed to send log to frontend: {}", e);
+    }
+}
+
+async fn log_info_to_frontend(message: &str, details: Option<serde_json::Value>) {
+    // Log to Rust console
+    log::info!("{}", message);
+    
+    // Also send to frontend logging service
+    if let Err(e) = send_backend_log("info".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
+        log::warn!("Failed to send log to frontend: {}", e);
+    }
+}
+
+async fn log_warn_to_frontend(message: &str, details: Option<serde_json::Value>) {
+    // Log to Rust console
+    log::warn!("{}", message);
+    
+    // Also send to frontend logging service
+    if let Err(e) = send_backend_log("warn".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
+        log::warn!("Failed to send log to frontend: {}", e);
     }
 }
 
@@ -133,21 +152,42 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     // Use default field variations if conversion map is not available
     let default_variations = ConversionMap::get_default_field_variations();
     
+    // Sort headers by length (longer first) to prefer more specific matches
+    let mut sorted_headers: Vec<&String> = headers.iter().collect();
+    sorted_headers.sort_by_key(|h| std::cmp::Reverse(h.len()));
+    
     for (field_name, variations) in default_variations {
-        for header in headers {
+        let mut field_matched = false;
+        
+        // Sort variations by length (longer first) to prefer more specific matches  
+        let mut sorted_variations = variations.clone();
+        sorted_variations.sort_by_key(|v| std::cmp::Reverse(v.len()));
+        
+        for header in &sorted_headers {
+            if field_matched { break; }
+            
             let header_lower = header.to_lowercase()
                 .replace('\r', "")  // Remove carriage returns
                 .replace('\n', "")  // Remove line feeds
                 .trim().to_string();
             
-            for variation in &variations {
+            for variation in &sorted_variations {
                 let variation_lower = variation.to_lowercase();
-                if header_lower == variation_lower || 
-                   header_lower.contains(&variation_lower) || 
-                   variation_lower.contains(&header_lower) {
-                    field_map.insert(field_name.clone(), header.clone());
-                    log::info!("✅ FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                
+                // Prefer exact matches first
+                if header_lower == variation_lower {
+                    field_map.insert(field_name.clone(), (*header).clone());
+                    log::info!("✅ EXACT FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                    field_matched = true;
                     break;
+                } 
+                // Then try partial matches, but only if no exact match found
+                else if header_lower.contains(&variation_lower) || variation_lower.contains(&header_lower) {
+                    // Only use partial match if we haven't found a better match already
+                    if !field_map.contains_key(&field_name) {
+                        field_map.insert(field_name.clone(), (*header).clone());
+                        log::info!("✅ PARTIAL FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                    }
                 }
             }
         }
@@ -212,18 +252,37 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
         log::warn!("No mappings from conversion map, falling back to field variations");
         let default_variations = ConversionMap::get_default_field_variations();
         
-        for header in headers {
-            let normalized_header = normalize_header(header);
+        // Sort headers by length (longer first) for better matching
+        let mut sorted_headers: Vec<&String> = headers.iter().collect();
+        sorted_headers.sort_by_key(|h| std::cmp::Reverse(h.len()));
+        
+        for (field_name, variations) in &default_variations {
+            let mut field_matched = false;
             
-            for (field_name, variations) in &default_variations {
-                for variation in variations {
+            // Sort variations by length (longer first) 
+            let mut sorted_variations = variations.clone();
+            sorted_variations.sort_by_key(|v| std::cmp::Reverse(v.len()));
+            
+            for header in &sorted_headers {
+                if field_matched { break; }
+                
+                let normalized_header = normalize_header(header);
+                
+                for variation in &sorted_variations {
                     let variation_lower = variation.to_lowercase();
-                    if normalized_header == variation_lower || 
-                       normalized_header.contains(&variation_lower) || 
-                       variation_lower.contains(&normalized_header) {
-                        field_map.insert(field_name.clone(), header.clone());
-                        log::info!("✅ VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                    
+                    // Prefer exact matches first
+                    if normalized_header == variation_lower {
+                        field_map.insert(field_name.clone(), (*header).clone());
+                        log::info!("✅ EXACT VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                        field_matched = true;
                         break;
+                    }
+                    // Then partial matches if no exact match found
+                    else if !field_map.contains_key(field_name) && 
+                           (normalized_header.contains(&variation_lower) || variation_lower.contains(&normalized_header)) {
+                        field_map.insert(field_name.clone(), (*header).clone());
+                        log::info!("✅ PARTIAL VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
                     }
                 }
             }
