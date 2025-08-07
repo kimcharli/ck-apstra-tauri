@@ -7,6 +7,8 @@ mod services;
 mod utils;
 
 use commands::*;
+use std::collections::HashMap;
+use std::sync::Mutex;
 
 // Simple greeting command for testing
 #[tauri::command]
@@ -17,7 +19,12 @@ fn greet(name: &str) -> String {
 fn main() {
     env_logger::init();
     
+    // Initialize API client state
+    let api_client_state: commands::apstra_api_handler::ApiClientState = 
+        Mutex::new(HashMap::new());
+    
     tauri::Builder::default()
+        .manage(api_client_state)
         .invoke_handler(tauri::generate_handler![
             greet,
             upload_excel_file,
@@ -43,7 +50,12 @@ fn main() {
             save_user_apstra_config,
             load_user_apstra_config,
             test_apstra_connection,
-            get_apstra_config_with_defaults
+            get_apstra_config_with_defaults,
+            apstra_login,
+            apstra_search_systems,
+            apstra_execute_query,
+            apstra_is_authenticated,
+            apstra_logout
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
