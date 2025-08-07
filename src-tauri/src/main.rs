@@ -56,7 +56,8 @@ fn main() {
             apstra_execute_query,
             apstra_is_authenticated,
             apstra_logout,
-            apstra_dump_blueprint
+            apstra_dump_blueprint,
+            send_backend_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

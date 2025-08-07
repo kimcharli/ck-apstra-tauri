@@ -5,6 +5,7 @@ use std::collections::HashMap;
 pub struct ConversionMap {
     pub header_row: Option<u32>,
     pub mappings: HashMap<String, String>,
+    pub field_variations: Option<HashMap<String, Vec<String>>>, // target_field -> [variations]
 }
 
 impl Default for ConversionMap {
@@ -12,6 +13,7 @@ impl Default for ConversionMap {
         Self {
             header_row: Some(1), // Default to first row (0-indexed)
             mappings: HashMap::new(),
+            field_variations: Some(Self::get_default_field_variations()),
         }
     }
 }
@@ -21,7 +23,67 @@ impl ConversionMap {
         Self {
             header_row,
             mappings,
+            field_variations: Some(Self::get_default_field_variations()),
         }
+    }
+
+    pub fn get_default_field_variations() -> HashMap<String, Vec<String>> {
+        let mut variations = HashMap::new();
+        
+        variations.insert("server_label".to_string(), vec![
+            "server_label".to_string(), "server".to_string(), "server_name".to_string(), 
+            "hostname".to_string(), "host name".to_string(), "host_name".to_string()
+        ]);
+        
+        variations.insert("switch_label".to_string(), vec![
+            "switch_label".to_string(), "switch".to_string(), "switch_name".to_string(), 
+            "switch name".to_string(), "device".to_string()
+        ]);
+        
+        variations.insert("switch_ifname".to_string(), vec![
+            "switch_ifname".to_string(), "switch_interface".to_string(), "switch_port".to_string(),
+            "switch port".to_string(), "port".to_string(), "interface".to_string()
+        ]);
+        
+        variations.insert("server_ifname".to_string(), vec![
+            "server_ifname".to_string(), "server_interface".to_string(), "server_port".to_string(),
+            "server port".to_string(), "nic".to_string(), "slot".to_string(), "slot/port".to_string(),
+            "slot port".to_string()
+        ]);
+        
+        variations.insert("is_external".to_string(), vec![
+            "is_external".to_string(), "external".to_string(), "ext".to_string()
+        ]);
+        
+        variations.insert("link_speed".to_string(), vec![
+            "link_speed".to_string(), "speed".to_string(), "bandwidth".to_string(),
+            "speed (gb)".to_string(), "speed(gb)".to_string()
+        ]);
+        
+        variations.insert("link_group_lag_mode".to_string(), vec![
+            "link_group_lag_mode".to_string(), "lag_mode".to_string(), "bond_mode".to_string(),
+            "mode".to_string(), "lacpneeded".to_string(), "lacp needed".to_string()
+        ]);
+        
+        variations.insert("link_group_ct_names".to_string(), vec![
+            "link_group_ct_names".to_string(), "ct".to_string(), "cts".to_string(),
+            "connectivity_template".to_string()
+        ]);
+        
+        variations.insert("server_tags".to_string(), vec![
+            "server_tags".to_string(), "tags".to_string()
+        ]);
+        
+        variations.insert("link_tags".to_string(), vec![
+            "link_tags".to_string(), "tags".to_string()
+        ]);
+        
+        variations.insert("comment".to_string(), vec![
+            "comment".to_string(), "comments".to_string(), "description".to_string(),
+            "notes".to_string()
+        ]);
+        
+        variations
     }
 
     pub fn from_json_map(json_map: HashMap<String, serde_json::Value>) -> Result<Self, String> {
@@ -51,6 +113,7 @@ impl ConversionMap {
         Ok(Self {
             header_row,
             mappings,
+            field_variations: Some(Self::get_default_field_variations()),
         })
     }
 

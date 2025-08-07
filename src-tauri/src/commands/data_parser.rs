@@ -130,36 +130,30 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
 fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     let mut field_map = HashMap::new();
     
-    // Define possible header variations for each field
-    let header_variations = vec![
-        ("server_label", vec!["server_label", "server", "server_name", "hostname", "host name"]),
-        ("switch_label", vec!["switch_label", "switch", "switch_name", "device"]),
-        ("switch_ifname", vec!["switch_ifname", "switch_interface", "switch_port", "port", "interface"]),
-        ("server_ifname", vec!["server_ifname", "server_interface", "server_port", "nic", "slot", "slot/port"]),
-        ("is_external", vec!["is_external", "external", "ext"]),
-        ("server_tags", vec!["server_tags", "tags"]),
-        ("link_group_ifname", vec!["link_group_ifname", "lag_name", "bond_name"]),
-        ("link_group_lag_mode", vec!["link_group_lag_mode", "lag_mode", "bond_mode", "mode"]),
-        ("link_group_ct_names", vec!["link_group_ct_names", "ct", "connectivity_template"]),
-        ("link_group_tags", vec!["link_group_tags", "link_tags"]),
-        ("link_speed", vec!["link_speed", "speed", "bandwidth"]),
-        ("link_tags", vec!["link_tags", "tags"]),
-        ("comment", vec!["comment", "comments", "description", "notes"]),
-    ];
+    // Use default field variations if conversion map is not available
+    let default_variations = ConversionMap::get_default_field_variations();
     
-    for (field_name, variations) in header_variations {
+    for (field_name, variations) in default_variations {
         for header in headers {
-            let header_lower = header.to_lowercase();
+            let header_lower = header.to_lowercase()
+                .replace('\r', "")  // Remove carriage returns
+                .replace('\n', "")  // Remove line feeds
+                .trim().to_string();
+            
             for variation in &variations {
-                if header_lower.contains(variation) || variation.contains(&header_lower) {
-                    field_map.insert(field_name.to_string(), header.clone());
+                let variation_lower = variation.to_lowercase();
+                if header_lower == variation_lower || 
+                   header_lower.contains(&variation_lower) || 
+                   variation_lower.contains(&header_lower) {
+                    field_map.insert(field_name.clone(), header.clone());
+                    log::info!("✅ FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
                     break;
                 }
             }
         }
     }
     
-    log::info!("Field mapping: {:?}", field_map);
+    log::info!("Fallback field mapping created {} mappings: {:?}", field_map.len(), field_map);
     field_map
 }
 
@@ -210,6 +204,29 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
         
         if !found {
             log::warn!("❌ NO MATCH FOUND for header: '{}'", header);
+        }
+    }
+    
+    // If no mappings found using conversion map, fall back to field variations
+    if field_map.is_empty() {
+        log::warn!("No mappings from conversion map, falling back to field variations");
+        let default_variations = ConversionMap::get_default_field_variations();
+        
+        for header in headers {
+            let normalized_header = normalize_header(header);
+            
+            for (field_name, variations) in &default_variations {
+                for variation in variations {
+                    let variation_lower = variation.to_lowercase();
+                    if normalized_header == variation_lower || 
+                       normalized_header.contains(&variation_lower) || 
+                       variation_lower.contains(&normalized_header) {
+                        field_map.insert(field_name.clone(), header.clone());
+                        log::info!("✅ VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
+                        break;
+                    }
+                }
+            }
         }
     }
     
