@@ -22,15 +22,12 @@ const SheetSelector: React.FC<SheetSelectorProps> = ({
 
   return (
     <div className="sheet-selector">
-      <h2>Select Sheet</h2>
       {!sheets || sheets.length === 0 ? (
         <div className="sheet-list">
           <p>Upload a file to see available sheets</p>
         </div>
       ) : (
         <div className="sheet-list">
-          <p>File: {filePath?.split('/').pop()}</p>
-          <p>Available sheets ({sheets.length}):</p>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
             {sheets.map((sheetName) => (
               <button
