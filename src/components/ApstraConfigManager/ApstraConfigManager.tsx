@@ -36,7 +36,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     host: '',
     port: 443,
     username: '',
-    password: '',
+    password: 'admin',
     blueprint_name: '',
     use_ssl: true,
     verify_ssl: false,
@@ -178,31 +178,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     }
   };
 
-  const testConnection = async () => {
-    if (!validateConfig()) return;
-
-    setState(prev => ({ ...prev, isTestingConnection: true, connectionStatus: 'unknown' }));
-    
-    try {
-      const isConnected = await invoke<boolean>('test_apstra_connection', { 
-        config: formData 
-      });
-      
-      setState(prev => ({ 
-        ...prev, 
-        isTestingConnection: false,
-        connectionStatus: isConnected ? 'success' : 'failed'
-      }));
-    } catch (error) {
-      console.error('Connection test failed:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isTestingConnection: false,
-        connectionStatus: 'failed',
-        validationErrors: [`Connection test failed: ${error}`]
-      }));
-    }
-  };
 
   const saveConfig = () => {
     if (!validateConfig()) return;
@@ -442,13 +417,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
               className={`connect-button ${isAuthenticated ? 'connected' : ''}`}
             >
               {isConnecting ? 'Connecting...' : isAuthenticated ? '✅ Connected' : 'Connect to Apstra'}
-            </button>
-            <button
-              onClick={testConnection}
-              disabled={state.isTestingConnection || state.isLoading || isConnecting}
-              className="test-button secondary"
-            >
-              {state.isTestingConnection ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
 
