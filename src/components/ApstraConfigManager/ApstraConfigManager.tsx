@@ -277,13 +277,13 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
 
               <div className="config-form">
                 <div className="form-section">
-                  <h3>Connection Settings</h3>
+                  <h3>Apstra Configuration</h3>
                   
                   <table className="config-table">
                     <tbody>
                       <tr>
                         <td className="field-label">
-                          <label htmlFor="host">Apstra Host:</label>
+                          <label htmlFor="host">Host:</label>
                         </td>
                         <td className="field-input">
                           <input
@@ -347,7 +347,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
                         <td className="field-label">
                           <label htmlFor="blueprint">Blueprint:</label>
                         </td>
-                        <td className="field-input" colSpan={3}>
+                        <td className="field-input">
                           <input
                             id="blueprint"
                             type="text"
@@ -356,41 +356,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
                             placeholder="terra"
                           />
                         </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="form-section">
-                  <h3>Advanced Settings</h3>
-                  
-                  <table className="config-table">
-                    <tbody>
-                      <tr>
-                        <td className="field-label">SSL/HTTPS:</td>
-                        <td className="field-input">
-                          <label className="checkbox-label">
-                            <input
-                              type="checkbox"
-                              checked={formData.use_ssl ?? true}
-                              onChange={(e) => handleFieldChange('use_ssl', e.target.checked)}
-                            />
-                            Use SSL/HTTPS
-                          </label>
-                        </td>
-                        <td className="field-label">SSL Verify:</td>
-                        <td className="field-input">
-                          <label className="checkbox-label">
-                            <input
-                              type="checkbox"
-                              checked={formData.verify_ssl ?? false}
-                              onChange={(e) => handleFieldChange('verify_ssl', e.target.checked)}
-                            />
-                            Verify Certificate
-                          </label>
-                        </td>
-                      </tr>
-                      <tr>
                         <td className="field-label">
                           <label htmlFor="timeout">Timeout:</label>
                         </td>
@@ -403,23 +368,38 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
                             min="1"
                             max="300"
                           />
-                          <span className="field-unit">seconds</span>
+                          <span className="field-unit">sec</span>
                         </td>
-                        <td colSpan={2}></td>
+                      </tr>
+                      <tr>
+                        <td className="field-label">SSL:</td>
+                        <td className="field-input">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={formData.use_ssl ?? true}
+                              onChange={(e) => handleFieldChange('use_ssl', e.target.checked)}
+                            />
+                            Use HTTPS
+                          </label>
+                        </td>
+                        <td className="field-label">Verify:</td>
+                        <td className="field-input">
+                          <label className="checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={formData.verify_ssl ?? false}
+                              onChange={(e) => handleFieldChange('verify_ssl', e.target.checked)}
+                            />
+                            Verify Cert
+                          </label>
+                        </td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              <div className="connection-status">
-                {state.connectionStatus === 'success' && (
-                  <div className="status-success">✅ Connection successful</div>
-                )}
-                {state.connectionStatus === 'failed' && (
-                  <div className="status-failed">❌ Connection failed</div>
-                )}
-              </div>
             </>
           )}
         </div>

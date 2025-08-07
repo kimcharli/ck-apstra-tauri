@@ -40,23 +40,23 @@
 .config-form {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .form-section {
   border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 20px;
+  border-radius: 6px;
+  padding: 16px;
   background-color: #fafafa;
 }
 
 .form-section h3 {
-  margin: 0 0 16px 0;
+  margin: 0 0 12px 0;
   color: #333;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 600;
   border-bottom: 2px solid #007bff;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 
 /* Table-style form layout */
@@ -75,17 +75,18 @@
 }
 
 .field-label {
-  width: 120px;
-  padding: 12px 16px 12px 0;
+  width: 100px;
+  padding: 8px 12px 8px 0;
   vertical-align: middle;
   font-weight: 500;
   color: #555;
   text-align: right;
   white-space: nowrap;
+  font-size: 0.9rem;
 }
 
 .field-input {
-  padding: 12px 16px 12px 0;
+  padding: 8px 12px 8px 0;
   vertical-align: middle;
 }
 
@@ -232,28 +233,6 @@
   cursor: pointer;
 }
 
-.connection-status {
-  margin: 20px 0;
-  text-align: center;
-}
-
-.status-success {
-  color: #28a745;
-  font-weight: 600;
-  padding: 12px;
-  background-color: #d4edda;
-  border: 1px solid #c3e6cb;
-  border-radius: 6px;
-}
-
-.status-failed {
-  color: #dc3545;
-  font-weight: 600;
-  padding: 12px;
-  background-color: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-radius: 6px;
-}
 
 .apstra-config-actions {
   display: flex;
