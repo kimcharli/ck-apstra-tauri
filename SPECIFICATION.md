@@ -50,485 +50,110 @@ Based on lessons from related projects, the system implements a proven two-phase
 - Interactive table display for user review
 
 **Phase 2: Action Execution**
-- User-triggered processing of validated data
+- User-selected action processing
 - Real-time progress tracking
-- Granular error handling
-- Results aggregation and reporting
+- Comprehensive error handling
+- Results reporting and cleanup
 
-This separation prevents processing failures and provides user control over when actions are executed.
+This separation prevents processing failures and provides user control over the workflow.
 
 ## 3. Project Structure
 
 ```
-ck-apstra-tauri/
-├── src-tauri/                    # Rust backend
-│   ├── src/
-│   │   ├── main.rs              # Tauri app entry point
-│   │   ├── lib.rs               # Library exports
-│   │   ├── commands/            # Tauri command handlers
-│   │   │   ├── mod.rs
-│   │   │   ├── file_handler.rs  # Excel upload/processing
-│   │   │   ├── data_parser.rs   # Sheet parsing & validation
-│   │   │   └── action_processor.rs # Network actions
-│   │   ├── services/            # Business logic
-│   │   │   ├── mod.rs
-│   │   │   ├── excel_service.rs # Excel file operations
-│   │   │   ├── validation_service.rs # Data validation
-│   │   │   └── network_service.rs # Network configuration actions
-│   │   ├── models/              # Data structures
-│   │   │   ├── mod.rs
-│   │   │   ├── network_config.rs # Network data models
-│   │   │   └── processing_result.rs # Results & errors
-│   │   └── utils/               # Utilities
-│   │       ├── mod.rs
-│   │       └── file_utils.rs    # Temp file management
-│   ├── Cargo.toml
-│   ├── tauri.conf.json          # Tauri configuration
-│   └── build.rs                 # Build script
-│
-├── src/                         # Frontend (React/Vue)
-│   ├── main.tsx                 # App entry point
-│   ├── App.tsx                  # Main app component
-│   ├── components/              # React components
-│   │   ├── FileUpload/
-│   │   ├── SheetSelector/
-│   │   ├── DataTable/
-│   │   ├── ActionPanel/
-│   │   ├── ProgressTracker/
-│   │   └── common/              # Shared components
-│   ├── hooks/                   # Custom React hooks
-│   ├── services/                # Frontend services
-│   ├── types/                   # TypeScript definitions
-│   ├── utils/                   # Frontend utilities
-│   └── styles/                  # Global styles
-│
-├── tests/                       # Integration tests
-├── docs/                        # Documentation
-├── SPECIFICATION.md             # This document
-├── CLAUDE.md                   # Claude Code instructions
-└── README.md                   # Project documentation
+src-tauri/
+├── src/
+│   ├── main.rs              # Tauri main application entry point
+│   ├── commands/            # Tauri command handlers
+│   │   ├── excel_processor.rs  # Excel processing commands
+│   │   ├── conversion_map.rs   # Conversion mapping commands
+│   │   └── action_processor.rs # Network action commands
+│   ├── services/            # Core business logic services
+│   │   ├── excel_service.rs    # Excel parsing and validation
+│   │   ├── conversion_service.rs # Header mapping service
+│   │   ├── action_service.rs   # Network action processing
+│   │   └── logging_service.rs  # Comprehensive logging system
+│   ├── models/              # Data structures and types
+│   │   ├── network_config.rs  # Network configuration data models
+│   │   ├── conversion_map.rs  # Conversion mapping structures
+│   │   └── action_result.rs   # Action processing results
+│   └── utils/               # Utility functions
+│       ├── file_utils.rs       # File handling utilities
+│       ├── validation.rs      # Data validation helpers
+│       └── error_handling.rs  # Error management utilities
+├── icons/                   # Application icons for all platforms
+├── Cargo.toml              # Rust dependencies and build configuration
+└── tauri.conf.json         # Tauri configuration
+
+src/
+├── components/             # React/Vue.js components
+│   ├── FileUpload/         # Drag-and-drop file upload
+│   ├── SheetSelector/      # Excel sheet selection interface
+│   ├── ConversionMapManager/ # Conversion mapping UI
+│   ├── DataTable/          # Interactive data visualization
+│   ├── ActionProcessor/    # Action selection and processing
+│   ├── ProgressTracker/    # Real-time progress display
+│   └── LogViewer/          # Comprehensive log display
+├── services/               # Frontend service layer
+│   ├── ExcelService.ts     # Excel processing API wrapper
+│   ├── ConversionMapService.ts # Conversion mapping API
+│   ├── ActionService.ts    # Action processing API
+│   └── LoggingService.ts   # Frontend logging integration
+├── types/                  # TypeScript type definitions
+│   ├── NetworkConfig.ts    # Network configuration types
+│   ├── ConversionMap.ts    # Conversion mapping types
+│   ├── ActionTypes.ts      # Action processing types
+│   └── ApiResponses.ts     # API response structures
+├── utils/                  # Frontend utility functions
+│   ├── fileHandlers.ts     # File processing utilities
+│   ├── validators.ts       # Data validation helpers
+│   └── formatters.ts       # Data formatting utilities
+├── hooks/                  # Custom React hooks
+│   ├── useExcelProcessing.ts # Excel processing state management
+│   ├── useActionProcessing.ts # Action processing state
+│   └── useLogging.ts       # Logging integration hooks
+├── styles/                 # Application styling
+│   ├── globals.css         # Global styles and variables
+│   ├── components.css      # Component-specific styles
+│   └── themes.css          # Theme configurations
+├── App.tsx                 # Main application component
+└── main.tsx                # Application entry point
+
+data/
+├── default_conversion_map.json  # Default Excel header mappings
+├── sample_configs/         # Sample configuration files
+└── test_files/            # Sample Excel files for testing
 ```
 
 ## 4. Core Features Specification
 
-### 4.1 Excel File Processing
-
-#### File Upload System
-- **Input**: Excel (.xlsx) files via drag-and-drop or file picker
-- **Temporary Storage**: Secure temporary file storage with automatic cleanup
-- **File Validation**: MIME type checking, file size limits
-- **Error Handling**: Clear feedback for invalid files
-
-#### Sheet Selection Interface
-- Display list of available sheets after successful upload
-- Sheet preview functionality
-- Selection persistence until processing completion
-
-#### Data Parsing Engine
-- **Required Column Headers**:
-  ```
-  - Switch (switch_label)
-  - Switch Interface (switch_ifname)
-  - Server (server_label)
-  - Server Interface (server_ifname)
-  - Switch Tags
-  - Link Tags
-  - CTs (link_group_ct_names)
-  - AE (link_group_ifname)
-  - LAG Mode (link_group_lag_mode)
-  - Speed (link_speed)
-  - External (is_external)
-  - Server Tags
-  ```
-
-#### Conversion Mapping System
-- **Default Conversion Map**: Ships with predefined Excel header mappings loaded from embedded JSON
-- **User Customization**: Users can modify conversion mappings through dedicated UI interface
-- **Flexible Loading**: Support loading conversion maps from external JSON files
-- **Persistent Configuration**: Save user customizations to local configuration files
-- **Header Row Configuration**: Configurable header row location (default: row 1)
-- **Dynamic Updates**: Conversion map changes immediately apply to current Excel data
-
-#### Data Validation Rules
-- **Conversion-Based Mapping**: Use conversion maps to translate Excel headers to internal field names
-- **Fallback Logic**: Default header matching when no conversion map is configured
-- **Required Fields**: Only process rows with essential network information (switch_label, switch_ifname)
-- **Duplicate Detection**: Skip rows with identical switch + switch_ifname combinations
-- **Data Type Validation**: Validate field formats and constraints based on target field types
-- **Error Aggregation**: Collect and report all validation issues with specific row/column context
-
-#### Defensive Data Processing
-**CRITICAL**: Apply defensive programming for robust Excel processing:
-
-- **Safe Field Access**: Never assume Excel headers exist; use Option/Result patterns
-- **Multi-Format Support**: Handle multiple possible header name variations for the same logical field
-- **Validation-First**: Validate data structure before attempting processing
-- **Graceful Degradation**: Skip malformed rows without stopping entire operation
-- **Error Context**: Provide detailed error information including row numbers and field names
-- **Backward Compatibility**: Support multiple Excel format versions simultaneously
-
-#### Field Naming Standards
-**CRITICAL**: Consistent field naming prevents integration failures:
-
-- **Raw Input Processing**: Field mapping (`field_0`, `field_1`, etc.) occurs ONLY during sheet selection stage
-- **Normalized Internal Names**: After sheet selection, all backend services use consistent field names:
-  ```
-  blueprint, server_label, switch_label, switch_ifname, server_ifname
-  link_speed, link_group_lag_mode, link_group_ct_names
-  server_tags, switch_tags, link_tags
-  ```
-- **UI Display Names**: Frontend may use display-friendly names for presentation
-- **Service Integration**: All backend services expect normalized field names consistently
-
-**Rule**: Never mix field naming conventions within a single service or data flow.
-
-### 4.2 Data Visualization
-
-#### Interactive Table Component
-- **Features**:
-  - Column sorting (ascending/descending)
-  - Column filtering and search
-  - Row selection capabilities
-  - Pagination for large datasets
-  - Export functionality (CSV, JSON)
-
-#### Data Status Indicators
-- Visual indicators for validation status
-- Error highlighting and tooltips
-- Summary statistics panel
-- Data quality metrics
-
-### 4.3 Action Processing Engine
-
-#### Supported Actions
-- **Primary**: `import-generic-system`
-- **Extensible**: Plugin architecture for additional actions
-
-#### Progress Tracking System
-- **Real-time Updates**: WebSocket or event-based progress updates
-- **Granular Status**: Per-row processing status
-- **Time Estimation**: ETAs based on processing speed
-- **Cancellation Support**: Ability to stop processing
-
-#### Error Handling
-- **Graceful Degradation**: Continue processing despite individual failures
-- **Detailed Logging**: Comprehensive error logs with context
-- **Recovery Options**: Retry failed operations
-- **User Notifications**: Clear error messages and suggested actions
-
-#### Critical Processing Patterns
-**IMPORTANT**: These patterns prevent regressions and race conditions:
-
-- **System Readiness Verification**: Ensure systems are ready before applying configurations
-- **Wait Mechanisms**: Implement proper polling for system state changes (3-second intervals, 60-second timeout)
-- **Race Condition Prevention**: Never proceed with dependent operations immediately after system creation
-- **Intelligent Processing**: Only process when data differs from existing state (no-op optimization)
-- **Selective Operations**: Only process interfaces with actual configuration changes needed
-
-### 4.4 Conversion Mapping Architecture
-
-#### System Design
-The conversion mapping system provides flexible translation between Excel header names and internal field names, enabling the application to process diverse Excel formats without requiring users to modify their spreadsheets.
-
-#### Core Components
-
-**Backend Services**:
-- `ConversionService`: Core service for loading/saving conversion maps
-- `ConversionMapHandler`: Tauri command handlers for frontend-backend communication
-- Embedded default mapping from `../45738-webtool/data/conversion_map.json`
-- User data directory management for persistent configurations
-
-**Frontend Components**:
-- `ConversionMapManager`: Modal interface for editing conversion mappings
-- Interactive mapping table with add/remove/edit capabilities
-- Real-time preview of header-to-field mappings
-- File import/export functionality for sharing configurations
-
-**Data Models**:
-- `ConversionMap`: Core mapping structure with header_row and mappings HashMap
-- `ConversionMapInfo`: Extended metadata for saved configurations
-- `HeaderMapping`: UI state representation for conversion pairs
-
-#### Operational Flow
-
-1. **Default Loading**: Application embeds default conversion map from related project
-2. **User Customization**: Users access conversion manager through main UI button
-3. **Dynamic Application**: Changes to conversion map immediately reprocess current Excel data
-4. **Persistence**: User configurations saved to local application data directory
-5. **File Exchange**: Import/export JSON files for sharing conversion configurations
-
-#### Configuration Management
-- **Default Map Location**: Embedded in Rust binary from `data/default_conversion_map.json`
-- **User Map Storage**: `~/.local/share/ck-apstra-tauri/user_conversion_map.json` (Linux/macOS)
-- **Windows User Maps**: `%APPDATA%/ck-apstra-tauri/user_conversion_map.json`
-- **Header Row Flexibility**: Configurable header row position (1-based indexing)
-
-### 4.5 Security Requirements
-
-#### File Security
-- Sandboxed file processing
-- Automatic cleanup of temporary files
-- Input sanitization and validation
-- Path traversal protection
-
-#### Data Privacy
-- No data persistence beyond session
-- Secure memory handling
-- Audit logging for compliance
-
-### 4.6 Logging and Post-Mortem Analysis System
-
-#### Comprehensive Logging Service
-The application includes a comprehensive logging system for complete post-mortem analysis and debugging capabilities:
-
-**Logging Categories**:
-- NAVIGATION - Page and workflow transitions
-- BUTTON_CLICK - All user interactions with buttons and controls
-- WORKFLOW - Step-by-step workflow progress tracking
-- DATA_CHANGE - Configuration and data modifications
-- API_CALL - External service communications
-- ERROR - System errors and failures
-- SYSTEM - Application lifecycle and system events
-
-**Logging Levels**: INFO, WARN, ERROR, DEBUG
-
-#### Session Management
-- Unique session IDs for tracking user sessions
-- Session lifecycle logging (startup/shutdown)
-- Cross-component session correlation
-
-#### Log Export Functionality
-**Multiple Export Formats**:
-- **Text Format**: Human-readable logs with timestamps and details
-- **JSON Format**: Structured data for programmatic analysis
-- **CSV Format**: Spreadsheet-compatible for data analysis
-
-**Export Features**:
-- Timestamped filenames (e.g., `apstra-logs-2024-01-15T14-30-25.txt`)
-- File format auto-detection based on extension
-- Log filtering by category, level, and time range
-- Statistical summaries included in exports
-
-#### User Interface Integration
-- **Log Download Button**: 📥 icon in navigation header
-- **Visual Feedback**: Spinning animation during download
-- **Context-Aware Logging**: Captures button location, workflow state
-- **Error Correlation**: Links user actions to system responses
-
-#### Data Captured for Post-Mortem
-- Complete audit trail of user interactions
-- Workflow progression with timing information
-- Configuration changes with before/after values
-- Error conditions with full context
-- File operations and data processing results
-- System performance and connection health
-
-#### Privacy and Security
-- Password redaction in configuration logs
-- Session isolation for multi-user environments
-- Local storage only (no remote logging)
-- User-controlled export functionality
+> **Note**: Detailed core features documentation has been moved to [docs/core-features.md](./docs/core-features.md) for better organization and maintainability.
 
 ## 5. Current Implementation Status (Updated 2024-01-15)
 
 ### Completed Features
-- **Phase 1-3**: All core functionality implemented and operational
-- **Excel Processing**: Full Excel file upload, sheet selection, and data parsing
-- **Conversion Mapping**: User-customizable field mapping with default configurations
-- **Apstra Connection**: Configuration management with connection testing
-- **Network Provisioning**: Complete workflow with data validation and table display
-- **Tools Page**: System search, IP search, and blueprint management interfaces
-- **Navigation**: Shared navigation header across all pages with workflow integration
-- **Logging System**: Comprehensive post-mortem analysis with multiple export formats
-- **Cross-Platform**: Native desktop applications for macOS, Windows, and Linux
-- **Professional UI**: Responsive design with modern styling and user experience
+- ✅ Tauri-based cross-platform desktop application
+- ✅ Professional application branding with custom icons for all platforms (macOS .app, Windows .exe, Linux .deb/.rpm/.AppImage)
+- ✅ Excel file upload with drag-and-drop interface and comprehensive file validation
+- ✅ Dynamic sheet enumeration and selection with real-time preview
+- ✅ Intelligent conversion mapping system with embedded defaults and user customization
+- ✅ Advanced data validation with duplicate detection and error reporting
+- ✅ Interactive data table with sorting, filtering, and export capabilities
+- ✅ Comprehensive logging system with multiple export formats and post-mortem analysis
+- ✅ Direct Apstra REST API integration for real-time system search and network management
+- ✅ Centralized authentication architecture with React Context and custom hooks
+- ✅ Professional UX design with discomfort-to-comfort authentication flow patterns
 
 ### Key Architectural Decisions Implemented
-- Tauri framework with React frontend and Rust backend
-- Two-phase processing pattern (validation → execution)
-- Modular component architecture with shared services
-- Defensive programming patterns with comprehensive error handling
-- Local-first approach with no remote data persistence
-- Session-based logging with privacy-conscious data handling
+- **Two-Phase Processing**: Validation followed by action execution prevents processing failures
+- **Defensive Data Processing**: Robust handling of malformed Excel data with graceful degradation
+- **Conversion Mapping Architecture**: Flexible header-to-field translation supporting diverse Excel formats
+- **Comprehensive Logging**: Complete audit trail with session management and post-mortem analysis
+- **API Integration**: Direct Apstra AOS integration with graph query capabilities and session management
+- **Authentication Centralization**: Eliminated code duplication through React Context and custom hooks
 
 ### UI/UX Design Patterns
 
-#### Button-Style Web Opening Pattern
-**Standard Pattern for External Web Links**: All interactive elements that open external Apstra web pages use a consistent button-style approach.
-
-**Implementation Requirements**:
-- **Import**: `import { open } from '@tauri-apps/api/shell';`
-- **Click Handler**: `onClick={() => open(url)}` (never use `window.open()`)
-- **CSS Classes**: 
-  - `.blueprint-btn` for blueprint-related actions (blue gradient)
-  - `.system-btn` for system-related actions (green gradient)
-- **Tooltip**: Always include `title` attribute with descriptive text
-
-**Usage Locations**:
-- System search results: Blueprint column and System column buttons
-- Blueprints table: Blueprint label as clickable button
-- Any future Apstra web navigation requirements
-
-**Rationale**: 
-- `window.open()` doesn't work in Tauri desktop environment
-- Tauri's `shell.open()` properly opens URLs in user's default browser
-- Consistent button styling provides clear visual cue for web navigation
-- Tooltips improve accessibility and user understanding
-
-**Example Implementation**:
-```typescript
-<button
-  className="blueprint-btn"
-  onClick={() => open(`https://${apstraHost}/#/blueprints/${blueprintId}/staged`)}
-  title={`Open blueprint ${blueprintLabel} in Apstra`}
->
-  {blueprintLabel}
-</button>
-```
-
-#### Graph Query Pattern for Topology Information
-**Standard Pattern for System Topology Extraction**: System searches use graph queries to retrieve hierarchical topology information (pod, rack) in a single API call.
-
-**Implementation Requirements**:
-- **Method**: `searchSystemsWithTopology(blueprintId, serverName)` instead of basic `searchSystems()`
-- **Graph Query**: 
-```
-match(
-  node('system', label='{system_label}', name='system')
-    .out().node('pod', name='pod'),
-  node(name='system')
-    .out().node('rack', name='rack')
-)
-```
-
-**Response Processing**:
-- Graph query returns named nodes: `item.system`, `item.pod`, `item.rack`
-- Extract properties: `item.system.id`, `item.pod.label`, `item.rack.label`
-- Fallback to direct properties for backward compatibility
-
-**Usage Locations**:
-- System search results with pod/rack columns
-- IP search results with interface/system/pod/rack columns
-- Any system topology queries requiring hierarchical context
-
-**Rationale**:
-- Single query retrieves system, pod, and rack information efficiently
-- Reduces API calls compared to separate topology queries  
-- Provides accurate hierarchical context for network elements
-- Enables proper system identification in multi-pod environments
-
-#### IP Search Pattern with Interface Topology
-**Enhanced Pattern for IP Address Discovery**: IP searches use specialized graph queries to traverse from interfaces to systems and topology, providing complete network context.
-
-**Implementation Requirements**:
-- **Method**: `searchIPsWithTopology(blueprintId, ipAddress)` for comprehensive IP discovery
-- **Graph Query**:
-```
-match(
-  node('interface', ipv4_addr='{ip_slash_mask}', name='intf').in_().node('system', name='system')
-    .out().node('pod', name='pod'),
-  node(name='system').out().node('rack', name='rack')
-)
-```
-
-**Response Processing**:
-- Graph query returns named nodes: `item.intf`, `item.system`, `item.pod`, `item.rack`
-- Extract interface properties: `item.intf.id`, `item.intf.ipv4_addr`, `item.intf.if_name`, `item.intf.if_type`
-- Extract system properties: `item.system.id`, `item.system.hostname`
-- Extract topology: `item.pod.label`, `item.rack.label` with respective IDs
-- Format interface labels: `if_name (if_type)` or `if_type` if if_name is empty
-
-**Search Features**:
-- **Blueprint Selection**: Default "Select Blueprint", use selected or search all
-- **Cross-Blueprint Search**: Automatically searches all blueprints when no specific blueprint selected
-- **Table Results**: Blueprint, Pod, Rack, System, Interface, IP Address, and Details columns
-- **Button Navigation**: All network entities clickable with proper Apstra URLs
-
-**Usage Locations**:
-- IP search results with complete network topology context
-- Interface-centric queries requiring system and topology information
-- Network troubleshooting workflows requiring IP-to-system mapping
-
-**Rationale**:
-- **Interface-First Discovery**: Starts from IP interfaces and traverses to system context
-- **Complete Network Context**: Single query provides interface, system, and topology information
-- **Efficient Troubleshooting**: Reduces multiple queries for IP address investigation
-- **Consistent UX**: Follows same pattern as system search for user familiarity
-
-#### Blueprint Management Operations
-**Automated Blueprint Data Export**: Blueprint dump functionality provides complete blueprint configuration export with automated file download.
-
-**Implementation Requirements**:
-- **Method**: `dumpBlueprint(blueprintId)` for complete blueprint data retrieval
-- **API Endpoint**: `/api/blueprints/{blueprintId}` for full blueprint JSON export (backend implementation needed)
-- **File Download**: Client-side JSON file generation with automated download
-- **Current Status**: Demo implementation using graph queries while backend is being developed
-
-**Dump Features**:
-- **Filename Generation**: `{blueprint-name}-{YYYYMMDDTHHMMSS}.json` format
-- **Name Sanitization**: Blueprint names sanitized for filesystem compatibility
-- **Pretty JSON**: Downloaded files formatted with 2-space indentation for readability
-- **Loading States**: Visual feedback during API call and file generation
-- **Error Handling**: Authentication checks and comprehensive error reporting
-
-**File Naming Pattern**:
-```
-dh50-colo1-20240115T143025.json
-dh2-colo2-20240115T143127.json
-```
-
-**Usage Locations**:
-- Blueprints management table: "Dump" action buttons
-- Blueprint administration workflows
-- Configuration backup and export operations
-
-**Rationale**:
-- **Complete Export**: Full blueprint configuration for backup and analysis
-- **Automated Workflow**: Single-click export with no manual file handling
-- **Consistent Naming**: Timestamped files prevent naming conflicts
-- **Immediate Download**: Browser-based download eliminates server storage needs
-
-#### Reusable ApstraButton Component Pattern
-**Standard Pattern for Apstra Web Navigation**: All Apstra web links use a centralized, reusable button component with consistent styling and functionality.
-
-**Component Location**: `/src/components/ApstraButton/ApstraButton.tsx`
-
-**Implementation Requirements**:
-- **Import**: `import ApstraButton from '../ApstraButton';`
-- **Usage**: `<ApstraButton type="blueprint" label="DH50-Colo1" url={blueprintUrl} />`
-- **Types**: `'blueprint' | 'system' | 'pod' | 'rack'` with distinct color schemes
-- **URL Generation**: Use `generateApstraUrls` utility for consistent URL patterns
-
-**Component Features**:
-- **Type-based Styling**: Different gradient colors per component type
-  - Blueprint: Blue gradient (`#007bff` → `#0056b3`)
-  - System: Green gradient (`#28a745` → `#1e7e34`) 
-  - Pod: Orange gradient (`#fd7e14` → `#dc6502`)
-  - Rack: Purple gradient (`#6f42c1` → `#5a32a3`)
-- **Auto-tooltips**: Generates descriptive tooltips automatically
-- **Empty State Handling**: Shows "-" for missing/empty labels
-- **Responsive Design**: Adapts sizing for mobile devices
-- **Consistent Behavior**: Uses Tauri's `shell.open()` for all navigation
-
-**URL Utility Functions** (`/src/utils/apstraUrls.ts`):
-```typescript
-generateApstraUrls.blueprint({ host, blueprintId })
-generateApstraUrls.system({ host, blueprintId, nodeId })
-generateApstraUrls.pod({ host, blueprintId, nodeId })
-generateApstraUrls.rack({ host, blueprintId, nodeId })
-```
-
-**Usage Locations**:
-- System search results: All four column types (Blueprint, Pod, Rack, System)
-- Blueprints table: Blueprint labels as navigation buttons
-- Any future Apstra entity navigation requirements
-
-**Rationale**:
-- **DRY Principle**: Single component eliminates code duplication
-- **Consistent UX**: Uniform styling and behavior across all Apstra links
-- **Maintainability**: Centralized styling and URL generation logic
-- **Type Safety**: TypeScript ensures correct usage patterns
-- **Scalability**: Easy to extend with new entity types
+> **Note**: Detailed UI/UX design patterns documentation has been moved to [docs/ui-design-patterns.md](./docs/ui-design-patterns.md) and [docs/ux-design-standards.md](./docs/ux-design-standards.md) for better organization and maintainability.
 
 ### Current Application Workflow
 1. **Apstra Connection**: Configure controller connection and blueprint settings
@@ -551,450 +176,123 @@ generateApstraUrls.rack({ host, blueprintId, nodeId })
   - Tauri project initialization
   - Basic UI framework setup
   - File upload component
-  - Excel parsing foundation
-  - Simple data display
-
-- **Technical Tasks**:
-  - Set up Tauri development environment
-  - Implement file upload with drag-and-drop
-  - Integrate Excel parsing library
-  - Create basic table component
-  - Establish Tauri command structure
+  - Excel parsing infrastructure
+- **Success Criteria**:
+  - Application runs on target platforms
+  - File upload accepts .xlsx files
+  - Basic Excel sheet enumeration works
+  - Core project structure established
 
 ### Phase 2: Core Processing (Weeks 3-5)
 - **Deliverables**:
   - Sheet selection interface
-  - Data validation engine
-  - Temporary file management
-  - Progress tracking foundation
-  - Error handling system
-
-- **Technical Tasks**:
-  - Implement sheet enumeration and selection
-  - Build header mapping system
-  - Create validation rules engine
-  - Implement duplicate detection
-  - Add progress tracking infrastructure
+  - Data parsing with conversion mapping
+  - Interactive data table
+  - Validation engine
+- **Success Criteria**:
+  - ✅ Accurate sheet selection and data parsing
+  - ✅ Conversion mapping system functional
+  - ✅ Data validation catches common errors
+  - ✅ Table displays parsed data correctly
 
 ### Phase 3: Advanced Features (Weeks 6-8)
 - **Deliverables**:
-  - Interactive sortable table
   - Action processing engine
-  - Real-time progress updates
-  - Export capabilities
+  - Progress tracking system
+  - Error handling and recovery
+  - Export functionality
+- **Success Criteria**:
+  - Actions execute successfully
+  - Real-time progress updates work
   - Comprehensive error reporting
-
-- **Technical Tasks**:
-  - Enhance table with sorting and filtering
-  - Implement action processing pipeline
-  - Add real-time progress WebSocket/events
-  - Create export functionality
-  - Build comprehensive error UI
+  - Multiple export formats supported
 
 ### Phase 4: Polish & Testing (Weeks 9-10)
 - **Deliverables**:
-  - Performance optimizations
-  - Comprehensive testing suite
+  - UI/UX refinements
+  - Performance optimization
+  - Comprehensive testing
   - Documentation completion
-  - Deployment preparation
+- **Success Criteria**:
+  - Professional user experience
+  - Stable performance under load
+  - Complete test coverage
+  - Deployment-ready application
 
-- **Technical Tasks**:
-  - Performance profiling and optimization
-  - E2E testing implementation
-  - Documentation writing
-  - Build and deployment pipeline setup
-
-## 6. Technical Constraints
+## 7. Technical Constraints
 
 ### Performance Requirements
-- **File Size**: Support Excel files up to 100MB
-- **Processing Speed**: Handle 10,000+ rows within 30 seconds
-- **Memory Usage**: Efficient streaming for large datasets
-- **Responsiveness**: UI remains responsive during processing
+- Handle Excel files up to 100MB
+- Process 10,000+ rows efficiently
+- Real-time progress updates (< 500ms latency)
+- Memory usage under 1GB for typical workloads
 
 ### Compatibility Requirements
-- **Platforms**: Windows 10+, macOS 10.15+, Linux (Ubuntu 20.04+)
-- **Excel Formats**: .xlsx files (Office 2007+)
-- **Screen Resolutions**: Responsive design for 1024x768 to 4K displays
+- **Operating Systems**: Windows 10+, macOS 10.15+, Ubuntu 20.04+
+- **Excel Compatibility**: .xlsx format, Excel 2016+ compatibility
+- **Network Requirements**: HTTPS connectivity for Apstra API integration
 
-## 7. Quality Assurance
+## 8. Quality Assurance
 
 ### Testing Strategy
-- **Unit Tests**: Rust backend logic (90%+ coverage)
-- **Integration Tests**: Frontend-backend communication
-- **E2E Tests**: Complete user workflows
+- **Unit Tests**: Core business logic functions
+- **Integration Tests**: Tauri commands and API integration
+- **End-to-End Tests**: Complete workflow validation
 - **Performance Tests**: Large file processing benchmarks
-- **Security Tests**: File handling and input validation
+- **Cross-Platform Tests**: Functionality across target operating systems
 
 ### Code Quality Standards
 
-#### Modularization Requirements
-**CRITICAL**: Enforce strict modularization to prevent maintenance issues:
+> **Note**: Detailed code quality and modularization standards have been moved to project documentation for better organization and maintainability. Refer to CLAUDE.md for complete development principles and patterns.
 
-- **Maximum Function Length**: 20-25 lines recommended
-- **Single Responsibility**: Each function should do ONE thing well  
-- **Configuration-Driven**: Extract constants and configurations to module tops
-- **Helper Functions**: Create focused, single-purpose helper functions
-- **Assembly Pattern**: Main functions should read like clear step-by-step recipes
-
-#### Code Review Standards
-**Mandatory Checks During Reviews:**
-- Functions over 25 lines must justify their complexity
-- Any function doing multiple distinct operations must be split
-- Configuration should be extracted from implementation
-- Repeated patterns (3+ times) must be extracted to helpers
-
-**Red Flags to Reject:**
-- Functions with multiple `// Section:` comments (multiple responsibilities)
-- Long parameter lists (poor separation of concerns)
-- Nested conditionals more than 2-3 levels deep
-- Copy-pasted code blocks with minor variations
-
-#### Language-Specific Standards
-- **Rust**: Clippy linting, rustfmt formatting, comprehensive error types
-- **TypeScript**: ESLint + Prettier, strict type checking, component modularization
-- **Documentation**: Inline documentation for all public APIs
-- **Error Handling**: Graceful degradation with detailed logging
-
-#### Testing Standards for Modular Code
-- **Unit Testing**: Each helper function should be testable in isolation
-- **Integration Testing**: Assembly functions tested with mocked helpers
-- **Component Testing**: React components tested with clear separation of concerns
-- **Configuration Testing**: Validate configuration-driven behavior separately
-
-## 8. Success Criteria
+## 9. Success Criteria
 
 ### Functional Requirements
-- ✅ Successfully upload and process Excel files up to 100MB
-- ✅ Accurate sheet selection and data parsing
-- ✅ Reliable data validation with duplicate detection
-- ✅ Sortable, filterable data visualization
-- ⏳ Real-time action processing with progress tracking (framework ready, actions pending)
-- ✅ Comprehensive error handling and user feedback
-- ✅ Secure temporary file management with cleanup
+- Successfully process diverse Excel file formats
+- Validate and transform data according to network configuration requirements
+- Execute network actions with comprehensive progress tracking
+- Provide detailed logging and error reporting
+- Support cross-platform deployment and operation
 
 ### Non-Functional Requirements
-- ✅ Application startup time < 3 seconds
-- ✅ File processing completion within acceptable time limits
-- ✅ Intuitive user interface requiring minimal training
-- ✅ Cross-platform compatibility
-- ✅ Memory usage optimization for large datasets
+- **Performance**: Process 5,000 rows in under 30 seconds
+- **Reliability**: 99.5% success rate for valid input files
+- **Usability**: Complete workflow achievable in under 10 clicks
+- **Maintainability**: Modular architecture supporting feature extensions
+- **Security**: Secure handling of network credentials and temporary files
 
-## 9. Future Enhancements
+## 10. Future Enhancements
 
 ### Planned Extensions
-- **File Format Support**: CSV, JSON input formats
-- **Action Library**: Additional network configuration actions
-- **Batch Processing**: Multiple file processing queues
-- ✅ **API Integration**: Direct Apstra API connectivity (COMPLETED - System Search)
-- **Workflow Automation**: Saved processing templates
-- **Advanced Analytics**: Data trend analysis and reporting
-- **User Management**: Multi-user support with role-based access
-- **Cloud Integration**: Cloud storage and processing options
+- **Multiple Action Support**: Extend beyond `import-generic-system` to support diverse network operations
+- **Advanced Filtering**: Complex data filtering and transformation capabilities
+- **Template System**: Save and reuse processing configurations
+- **Batch Processing**: Support for multiple file processing workflows
+- **API Integration**: Direct integration with network device APIs
+- **Cloud Deployment**: Web-based version for enterprise environments
 
 ### Architectural Considerations for Growth
-- Plugin architecture for action extensibility
-- Database integration for processing history
-- Microservices preparation for cloud deployment
-- API-first design for future integrations
+- Plugin architecture for new action types
+- API abstraction layer for multiple network platforms
+- Scalable processing engine for enterprise workloads
+- Advanced caching and persistence mechanisms
 
-## 10. Apstra REST API Integration
+## 11. Apstra REST API Integration
 
-### Overview
-The application now includes direct integration with Apstra AOS REST API, enabling real-time system search and network infrastructure management capabilities.
+> **Note**: Detailed API integration documentation has been moved to [docs/api-integration.md](./docs/api-integration.md) for better organization and maintainability.
 
-### Implementation Architecture
+## 12. Centralized Authentication Architecture
 
-#### Backend Services (Rust)
-- **ApstraApiClient**: Core HTTP client with session-based authentication
-- **Authentication Management**: Secure token handling with AuthToken header pattern
-- **Query Engine Integration**: Direct access to Apstra's graph query engine at `/api/blueprints/{blueprint_id}/qe`
-- **Error Handling**: Comprehensive error handling for network, authentication, and API failures
+> **Note**: Detailed authentication architecture documentation has been moved to [docs/authentication-architecture.md](./docs/authentication-architecture.md) for better organization and maintainability.
 
-#### Frontend Services (TypeScript)
-- **ApstraApiService**: TypeScript wrapper providing clean API interface
-- **Authentication Flow**: Automatic authentication using stored Apstra configuration
-- **Real-time Results**: Live display of search results with JSON formatting
-- **Status Management**: Visual authentication and connection status indicators
+## 13. Documentation Organization
 
-### Features Implemented
+This specification has been reorganized into focused documentation files for better maintainability:
 
-#### System Search Functionality
-- **Query Format**: Implements `match(node('system', label='{server_name}', name='system'))` pattern
-- **Blueprint Selection**: Dropdown selector and text input for flexible blueprint targeting
-- **Result Display**: Structured JSON output with result count and detailed system information
-- **Error Feedback**: User-friendly error messages for authentication and network issues
+- **[docs/core-features.md](./docs/core-features.md)**: Complete core features specification including Excel processing, data validation, and logging systems
+- **[docs/api-integration.md](./docs/api-integration.md)**: Apstra REST API integration details and implementation
+- **[docs/authentication-architecture.md](./docs/authentication-architecture.md)**: Centralized authentication system design and implementation
+- **[docs/ui-design-patterns.md](./docs/ui-design-patterns.md)**: UI/UX design patterns and component standards
+- **[docs/ux-design-standards.md](./docs/ux-design-standards.md)**: User experience design standards and authentication flow requirements
 
-#### Authentication & Session Management
-- **Automatic Login**: Seamless authentication using user's stored Apstra configuration
-- **Session Persistence**: Maintains authentication state throughout application session
-- **Token Management**: Secure handling of AuthToken headers for API requests
-- **Connection Status**: Real-time authentication status indicators in UI
-
-#### Integration with Existing Systems
-- **Logging Integration**: All API interactions logged through comprehensive logging service
-- **Configuration Reuse**: Leverages existing Apstra configuration management
-- **Navigation Integration**: Seamless access through Tools page navigation
-- **Error Reporting**: Integrated error handling with existing notification systems
-
-### API Endpoints Utilized
-- `POST /api/aaa/login`: Authentication with username/password
-- `POST /api/blueprints/{blueprint_id}/qe`: Query execution against blueprint graphs
-- Authentication via AuthToken header as specified in API documentation
-
-### Technical Implementation Details
-
-#### Rust Backend Commands
-- `apstra_login`: Session-based authentication with credential validation
-- `apstra_search_systems`: System search using graph query language
-- `apstra_execute_query`: Generic query execution for custom searches
-- `apstra_is_authenticated`: Authentication status verification
-- `apstra_logout`: Session cleanup and token invalidation
-
-#### Security Considerations
-- **Credential Protection**: Passwords masked in logs and error messages
-- **SSL/TLS Support**: Configurable SSL certificate validation
-- **Session Management**: Secure token storage and automatic cleanup
-- **Error Sanitization**: Sensitive information filtered from user-facing errors
-
-### Usage Workflow
-1. **Authentication**: Application automatically authenticates using stored Apstra config
-2. **Blueprint Selection**: User selects target blueprint from dropdown or enters label
-3. **System Search**: User enters system hostname and executes search
-4. **Results Display**: API response displayed with result count and detailed system data
-5. **Error Handling**: Clear feedback for authentication, network, or API failures
-
-### Future API Extensions
-- **IP Address Search**: Enhanced search capabilities for IP/CIDR ranges
-- **Blueprint Management**: CRUD operations for blueprint manipulation
-- **Device Configuration**: Direct device configuration API integration
-- **Batch Operations**: Multi-system search and management capabilities
-
-## 11. Centralized Authentication Architecture (Updated 2024-01-15)
-
-### Overview
-The application now implements a centralized authentication architecture using React Context and custom hooks to eliminate code duplication and provide consistent authentication state management across all components.
-
-### Architecture Pattern: Context + Hooks
-
-#### Core Components
-
-**AuthContext Provider** (`src/contexts/AuthContext.tsx`):
-- Centralized authentication state management using React useReducer
-- Periodic authentication status checking (configurable interval, default 30 seconds)
-- Comprehensive error handling with retry logic and exponential backoff
-- Session lifecycle management with automatic cleanup
-- Integration with existing logging service for audit trails
-
-**Enhanced Authentication Service** (`src/services/AuthService.ts`):
-- Wrapper around existing ApstraApiService for enhanced error handling
-- Standardized error classification (NETWORK, AUTHENTICATION, SESSION_EXPIRED, UNKNOWN)
-- Configurable retry mechanisms with intelligent backoff strategies
-- Session expiration detection and automatic cleanup
-- Input validation and sanitization for security
-
-**Custom React Hooks**:
-- `useAuth()`: Full authentication context access for components needing all functionality
-- `useAuthStatus()`: Simplified hook for components only needing status information  
-- `useAuthGuard()`: Authentication guard for protected operations with automatic redirects
-
-#### Type System
-**Comprehensive Type Definitions** (`src/types/auth.ts`):
-- `AuthState`: Complete authentication state with loading, error, and timing information
-- `AuthContextValue`: Context interface defining all available authentication operations
-- `AuthConfig`: Configurable authentication behavior (intervals, retries, timeouts)
-- `AuthError`: Standardized error structure with classification and timestamps
-
-### Implementation Benefits
-
-#### Code Quality Improvements
-- **Eliminated Duplication**: Removed 3 separate authentication checking implementations
-- **Centralized Logic**: Single source of truth for authentication state across application
-- **Consistent Error Handling**: Standardized error classification and user feedback
-- **Enhanced Maintainability**: Authentication logic changes in one location affect entire app
-
-#### User Experience Enhancements
-- **Real-time Status Updates**: Immediate authentication status reflection across all components
-- **Intelligent Retry Logic**: Automatic recovery from temporary network issues
-- **Session Management**: Proactive session expiration detection and cleanup
-- **Contextual Feedback**: Specific error messages based on failure classification
-
-#### Developer Experience
-- **Clean Component APIs**: Components focus on presentation, authentication handled declaratively
-- **Type Safety**: Comprehensive TypeScript definitions prevent authentication-related bugs
-- **Testing Support**: Isolated authentication logic enables targeted unit testing
-- **Extensibility**: Hook-based architecture allows easy addition of new authentication features
-
-### Architectural Decisions
-
-#### Pattern Selection Rationale
-- **React Context over Redux**: Simpler implementation for authentication-focused state
-- **Custom Hooks over HOCs**: Better TypeScript integration and component composition
-- **Service Layer Enhancement**: Leverages existing backend integration while adding robustness
-
-#### Error Handling Strategy
-- **Classification-Based Errors**: Different handling strategies for network vs authentication failures
-- **Retry with Backoff**: Intelligent retry for transient network issues
-- **User-Centric Messages**: Error messages tailored to user actions and context
-- **Logging Integration**: All authentication events captured for post-mortem analysis
-
-#### Performance Considerations
-- **Configurable Check Intervals**: Balance between responsiveness and API load
-- **Smart Checking Logic**: Avoid unnecessary API calls when authentication status is stable
-- **Session Caching**: Local state reduces redundant authentication verification
-- **Cleanup Management**: Automatic cleanup of timers and subscriptions prevents memory leaks
-
-### Integration with Existing Systems
-- **Backward Compatibility**: Existing ApstraApiService continues to work unchanged
-- **Logging Integration**: All authentication events logged through existing logging service
-- **Configuration Reuse**: Leverages existing Apstra configuration management
-- **Error Propagation**: Authentication errors properly surface to existing error handling
-
-### Component Refactoring Impact
-
-#### Before: Duplicated Implementation
-```typescript
-// NavigationHeader.tsx - 30 second polling
-useEffect(() => {
-  const checkApstraAuth = async () => {
-    try {
-      const authStatus = await apstraApiService.checkAuthentication();
-      setIsApstraAuthenticated(authStatus);
-    } catch (error) {
-      setIsApstraAuthenticated(false);
-    }
-  };
-  const interval = setInterval(checkApstraAuth, 30000);
-  return () => clearInterval(interval);
-}, []);
-
-// Similar patterns in ApstraConfigManager.tsx and ToolsPage.tsx
-```
-
-#### After: Centralized Implementation
-```typescript
-// Any component needing authentication status
-import { useAuthStatus } from '../../hooks/useAuthStatus';
-
-const { isAuthenticated, isLoading, hasError } = useAuthStatus();
-```
-
-### Future Enhancements
-- **Multi-User Support**: Extend context for user role management
-- **Token Refresh**: Implement automatic token renewal
-- **Offline Support**: Cache authentication state for offline scenarios
-- **Analytics Integration**: Enhanced authentication event tracking
-
-## 12. User Experience Design Standards (Updated 2024-01-15)
-
-### Authentication Flow UX Requirements
-
-#### Visual State System
-The application implements a **discomfort-to-comfort UX progression** designed to guide users through proper authentication workflow:
-
-**CRITICAL REQUIREMENTS** (Must be maintained in code):
-
-#### 12.1 Default Password Configuration
-- **Default password MUST be 'admin'** in all configuration contexts:
-  - Form initialization: `password: 'admin'`
-  - Default configuration file: `data/default_apstra_config.json` password field
-  - User configuration loading: fallback to 'admin' when empty
-- **Rationale**: Common default for Apstra systems, reduces setup friction
-
-#### 12.2 Uncomfortable Authentication State (Not Connected)
-- **Visual Design**: Red background with pulsing animation
-- **CSS Implementation**:
-  ```css
-  .connect-button {
-    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-    border: 2px solid #dc3545;
-    animation: uncomfortable-pulse 2s infinite;
-  }
-  
-  @keyframes uncomfortable-pulse {
-    0%, 100% { 
-      box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
-      transform: scale(1);
-    }
-    50% { 
-      box-shadow: 0 6px 20px rgba(220, 53, 69, 0.6);
-      transform: scale(1.02);
-    }
-  }
-  ```
-- **Button Text**: "Connect to Apstra" (urgent language)
-- **Psychological Effect**: Creates visual urgency to complete authentication
-
-#### 12.3 Comfortable Authentication State (Connected)
-- **Visual Design**: Green background with subtle shimmer effect
-- **CSS Implementation**:
-  ```css
-  .connect-button.connected {
-    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
-    border-color: #28a745;
-    animation: none !important; /* Remove uncomfortable pulse */
-  }
-  
-  .connect-button.connected::before {
-    content: '';
-    position: absolute;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    animation: shimmer 2s infinite;
-  }
-  ```
-- **Button Text**: "✅ Connected" (success confirmation)
-- **Psychological Effect**: Visual reward for completing authentication
-
-#### 12.4 UX Flow Implementation Requirements
-
-**State Transition Logic**:
-1. **Initial Load**: Button appears in uncomfortable (red/pulsing) state
-2. **Authentication Success**: Immediate transition to comfortable (green/shimmer) state
-3. **Configuration Change**: Return to uncomfortable state, invalidate session
-4. **Session Expiration**: Automatic return to uncomfortable state
-
-**Tools Page Integration**:
-- **Disabled Sections**: When not authenticated, show disabled/grayed out sections
-- **Warning Banners**: Prominent banner directing users to authentication
-- **Navigation Integration**: One-click navigation to Apstra Connection page
-
-#### 12.5 Documentation Requirements
-These UX standards MUST be documented in:
-- **SPECIFICATION.md**: Formal specification with CSS examples
-- **Component Documentation**: Inline comments explaining UX rationale
-- **Test Scenarios**: Automated tests validating state transitions
-
-#### 12.6 Code Maintenance Standards
-- **CSS Class Naming**: `.connect-button` and `.connect-button.connected` classes required
-- **Animation Standards**: All animations must be cancellable with `animation: none !important`
-- **State Management**: Authentication state must drive visual state directly
-- **No Override Exceptions**: UX state must never be overridden by local component state
-
-**CRITICAL**: Any changes to authentication components must preserve these UX patterns to maintain user guidance effectiveness.
-
-## 13. User Interface Streamlining
-
-### 13.1 Sheet Selection Interface Optimization
-
-**Objective**: Reduce visual clutter and improve user workflow efficiency in the provisioning page sheet selection section.
-
-**Changes Implemented**:
-
-- Removed redundant "Select Sheet" title from SheetSelector component
-- Eliminated "File: [filename]" display text
-- Removed "Available sheets (X):" label text
-- Maintained sheet button functionality and selected state indication
-
-**Rationale**:
-
-- Sheet selection is already clearly indicated by the step header "Step 2: Select Sheet"
-- File name information is displayed in Step 1 after upload
-- Sheet count is visually apparent from the number of buttons displayed
-- Streamlined interface reduces cognitive load and improves focus on sheet selection action
-
-**Impact**:
-
-- Cleaner, more focused user interface
-- Reduced redundant information display
-- Maintains all functional capabilities
-- Improved visual hierarchy and information organization
+This modular approach improves documentation maintainability and makes it easier to find specific technical information.
