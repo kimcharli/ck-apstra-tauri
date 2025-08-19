@@ -1,5 +1,9 @@
 # Core Features Specification
 
+## Core Features Overview
+
+This document outlines the implemented core features of the Apstra Network Configuration Tool, including Excel processing, API integration, and comprehensive tooling capabilities.
+
 ## 4.1 Excel File Processing
 
 ### File Upload System
@@ -143,6 +147,54 @@ The conversion mapping system provides flexible translation between Excel header
 1. **Default Loading**: Application embeds default conversion map from related project
 2. **User Customization**: Users access conversion manager through main UI button
 3. **Dynamic Application**: Changes to conversion map immediately reprocess current Excel data
+
+## 4.5 Apstra API Integration & Tools
+
+### Live Search Capabilities
+The application provides real-time search functionality through direct Apstra API integration:
+
+**System Search**:
+- **Query Engine**: Uses Apstra's graph query engine at `/api/blueprints/{blueprint_id}/qe`
+- **Search Pattern**: `match(node('system', label='{server_name}', name='system'))`
+- **Real-time Results**: Live display with result count and structured JSON output
+- **Blueprint Flexibility**: Dropdown selector and text input for blueprint targeting
+
+**IP Address Search** (Planned):
+- **CIDR Support**: Search for IP addresses and CIDR ranges
+- **Network Topology**: Integration with network topology visualization
+- **Cross-Blueprint**: Search capabilities across multiple blueprints
+
+### Blueprint Management Tools
+**Operations Available**:
+- **Leafs Operation**: Retrieve leaf switch information with comprehensive details
+- **Dump Operation**: Export blueprint configuration data for analysis
+- **Direct API Access**: Live connection to Apstra controllers for real-time data
+
+**Integration Features**:
+- **Session Management**: Secure authentication with automatic token refresh
+- **URL Generation**: Dynamic creation of Apstra web interface URLs for seamless navigation
+- **Error Handling**: Comprehensive API error management with user-friendly feedback
+
+### Authentication Architecture
+**Implementation Details**:
+- **Session-Based Auth**: Secure token management with AuthToken header pattern
+- **Automatic Login**: Seamless authentication using stored Apstra configuration
+- **Status Indicators**: Real-time authentication status across the application
+- **Secure Storage**: Credentials protected with masked logging and secure handling
+
+### Navigation & User Experience
+**Seamless Integration**:
+- **Button-Style Navigation**: Consistent button patterns for external Apstra web links
+- **Tooltips & Context**: Descriptive tooltips for improved user understanding
+- **Visual Feedback**: Clear indicators for connection status and operation results
+- **Logging Integration**: All API interactions captured in comprehensive logging system
+
+### Future API Extensions
+**Planned Enhancements**:
+- **Automated Provisioning**: Direct network configuration via Apstra API
+- **Batch Operations**: Multi-system search and management capabilities
+- **Configuration Management**: CRUD operations for blueprint manipulation
+- **Advanced Analytics**: Deep integration with Apstra's analytics capabilities
 4. **Persistence**: User configurations saved to local application data directory
 5. **File Exchange**: Import/export JSON files for sharing conversion configurations
 

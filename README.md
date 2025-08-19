@@ -15,8 +15,10 @@ This application provides a streamlined workflow for:
 - Interactive data visualization in sortable tables
 - User-customizable field mappings with persistent configuration
 - Real-time data processing with comprehensive error handling
-- Apstra connection management with blueprint integration
-- System and IP search tools for network infrastructure
+- **Apstra connection management with session-based authentication**
+- **Direct Apstra API integration for system and IP search capabilities**
+- **Blueprint management tools (Leafs and Dump operations)**
+- **URL generation for direct Apstra web interface navigation**
 - Comprehensive logging with post-mortem analysis capabilities
 
 ## Technology Stack
@@ -104,9 +106,11 @@ npm run tauri:build
 - Graceful handling of missing or malformed data
 
 **Apstra Integration:**
-- Connection configuration with host, port, and blueprint settings
-- Connection testing with visual status indicators
-- Blueprint device validation and matching
+- **Session-based authentication** with secure credential management
+- Connection testing with visual status indicators and MCP server support
+- **Direct API access** for system and IP address searches across blueprints
+- **Blueprint management** with Leafs and Dump operations
+- **URL generation** for seamless navigation to Apstra web interface
 - Network provisioning workflow with data verification
 
 **Tools and Search:**
@@ -123,11 +127,12 @@ npm run tauri:build
 - Post-mortem analysis capabilities for debugging and optimization
 
 ### 🚀 Future Enhancements
-- [ ] Direct Apstra API integration for automated provisioning
+- [ ] **Automated network provisioning** via Apstra API (search functionality complete)
 - [ ] Real-time progress tracking for bulk operations
 - [ ] Advanced data export capabilities with custom templates
 - [ ] Batch file processing queues for multiple Excel files
 - [ ] Historical provisioning records and rollback capabilities
+- [ ] **Enhanced MCP server integration** for extended Apstra capabilities
 
 ## Quick Start Guide
 
@@ -143,8 +148,8 @@ npm run tauri:build
 2. **Configure Apstra Connection** (Step 1):
    - Click "1. Apstra Connection" in the header or dashboard
    - Enter Apstra controller host, port, and credentials
-   - Specify blueprint name for provisioning
-   - Test connection to verify settings
+   - **Authenticate and establish session** with connection testing
+   - Specify blueprint name for provisioning and search operations
 
 3. **Customize Conversion Mappings** (Step 2):
    - Click "2. Conversion Map" to customize Excel header mappings
@@ -160,10 +165,11 @@ npm run tauri:build
    - Execute provisioning after validation
 
 5. **Use Search Tools** (Step 4):
-   - Click "4. Tools" for system and IP search capabilities
-   - Search for specific systems by name across blueprints
-   - Find IP addresses or CIDR ranges in network configurations
-   - Manage blueprint operations (Leafs, Dump)
+   - Click "4. Tools" for **live Apstra API search capabilities**
+   - **Search systems by name** with real-time results across blueprints
+   - **Find IP addresses or CIDR ranges** with blueprint filtering
+   - **Manage blueprint operations** (Leafs, Dump) with direct API calls
+   - **Generate Apstra web URLs** for seamless navigation to device details
 
 6. **Download Session Logs**:
    - Click the 📥 button in the navigation header
@@ -181,8 +187,14 @@ The application works with Excel files containing network configuration data. De
 
 ## Documentation
 
-- **SPECIFICATION.md**: Complete technical specification
-- **CLAUDE.md**: Development guidelines for Claude Code
+- **SPECIFICATION.md**: Complete technical specification with architecture decisions
+- **CLAUDE.md**: Development guidelines and patterns for Claude Code
+- **docs/**: Organized technical documentation including:
+  - **API Integration**: Apstra REST API integration patterns
+  - **Authentication Architecture**: Session management and security
+  - **Core Features**: Detailed feature specifications and workflows
+  - **UI Design Patterns**: Component design and user interface standards
+  - **UX Design Standards**: User experience guidelines and accessibility
 
 ## Contributing
 

@@ -26,9 +26,18 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
   const [newTargetField, setNewTargetField] = useState('');
 
   const availableFields = [
-    'Switch', 'Switch Tags', 'Switch Interface', 'Link Tags', 
-    'CTs', 'AE', 'LAG Mode', 'Speed', 'Server Interface', 
-    'Server', 'External', 'Server Tags'
+    { value: 'switch_label', label: 'Switch Name' },
+    { value: 'switch_ifname', label: 'Switch Interface/Port' },
+    { value: 'server_label', label: 'Server Name/Host Name' },
+    { value: 'server_ifname', label: 'Server Interface/Slot/Port' },
+    { value: 'link_speed', label: 'Link Speed' },
+    { value: 'is_external', label: 'External Flag' },
+    { value: 'link_group_ifname', label: 'Link Group/AE Interface' },
+    { value: 'link_group_lag_mode', label: 'LAG Mode/LACP' },
+    { value: 'link_group_ct_names', label: 'Connectivity Templates (CTs)' },
+    { value: 'server_tags', label: 'Server Tags' },
+    { value: 'link_tags', label: 'Link Tags' },
+    { value: 'comment', label: 'Comments/Notes' }
   ];
 
   useEffect(() => {
@@ -275,7 +284,7 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
               >
                 <option value="">Select Target Field</option>
                 {availableFields.map(field => (
-                  <option key={field} value={field}>{field}</option>
+                  <option key={field.value} value={field.value}>{field.label}</option>
                 ))}
               </select>
               <button onClick={addMapping} disabled={!newExcelHeader.trim() || !newTargetField}>
@@ -302,7 +311,7 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
                       onChange={(e) => updateMapping(index, 'targetField', e.target.value)}
                     >
                       {availableFields.map(field => (
-                        <option key={field} value={field}>{field}</option>
+                        <option key={field.value} value={field.value}>{field.label}</option>
                       ))}
                     </select>
                   </div>

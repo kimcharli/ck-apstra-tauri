@@ -9,9 +9,12 @@ This is a Tauri-based web application for processing Excel spreadsheets containi
 ## Architecture
 
 The project follows a Tauri architecture pattern with:
-- **Frontend**: Modern web framework (React/Vue.js) for the user interface
+- **Frontend**: React with TypeScript for the user interface
 - **Backend**: Rust-based Tauri backend for file processing and system interactions
-- **Core Features**: Excel parsing, data validation, interactive table display, action processing with real-time progress tracking
+- **Core Features**: Excel parsing, data validation, interactive table display, **Apstra API integration** with session management
+- **API Integration**: Direct REST API communication with Apstra controllers for real-time search and management
+- **State Management**: Session-based authentication with secure credential handling
+- **URL Generation**: Dynamic Apstra web interface URL generation for seamless navigation
 
 ## Key Requirements
 
@@ -72,14 +75,27 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Comprehensive error handling and user feedback
 - Action history tracking
 
+### Apstra API Integration
+- **Session Management**: Secure authentication with session tokens and automatic refresh
+- **Live Search Capabilities**: Real-time system and IP address search across blueprints
+- **Blueprint Operations**: Leafs and Dump operations with direct API integration
+- **URL Generation**: Dynamic generation of Apstra web interface URLs for seamless navigation
+- **Error Handling**: Comprehensive API error handling with user-friendly feedback
+- **State Persistence**: Client-side state management for API sessions and configurations
+
 ## Development Commands
 
 - `npm run tauri:dev` - Start development server
 - `npm run tauri:build` - Build application for production
 - `cargo test` - Run Rust backend tests (from src-tauri directory)
-- `npm test` - Run frontend tests
+- `npm test` - Run frontend tests with Vitest
+- `npm run test:ui` - Run tests with Vitest UI
+- `npm run test:rust` - Run Rust backend tests
+- `npm run test:integration` - Run integration tests
 - `npm run dev` - Start frontend development server only
 - `RUST_LOG=debug npm run tauri:dev` - Start with debug logging
+- `npm run lint` - TypeScript type checking
+- `npm run lint:rust` - Rust code linting with Clippy
 
 ## Security Considerations
 
@@ -87,6 +103,10 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Temporary file cleanup after processing
 - Input validation for all user data
 - Error handling without exposing sensitive information
+- **Session-based authentication**: Secure credential storage and session token management
+- **API Security**: Proper authentication headers and error handling for Apstra API calls
+- **State Management**: Secure handling of authentication state and sensitive configuration data
+- **URL Generation**: Safe construction of Apstra web interface URLs with parameter validation
 
 ## Debugging and Troubleshooting
 
@@ -108,6 +128,12 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Ensure Tauri dependencies are installed: `cargo install tauri-cli`
 - Check for missing icon files in `src-tauri/icons/`
 - Verify all required npm dependencies are installed
+
+**API Integration Issues**:
+- Verify Apstra session authentication: Check for `401 Unauthorized` responses
+- Test API connectivity: Use debug logs to trace API call failures
+- Session timeout handling: Implement automatic re-authentication on session expiry
+- MCP server integration: Ensure proper MCP server configuration for Apstra API calls
 
 ### Debug Logging
 - Use `RUST_LOG=debug` for detailed backend logs
@@ -595,10 +621,50 @@ try {
 - **Batch Processing**: Group related operations for efficiency
 - **Progress Tracking**: Provide granular progress updates for long-running operations
 
+## Recent Development Patterns (2024)
+
+### API Service Architecture
+The application implements a robust API service layer with:
+
+**Backend (`src-tauri/src/`)**: 
+- `commands/apstra_api_handler.rs`: Tauri command handlers for API operations
+- `services/apstra_api_service.rs`: Core API service with session management
+- Global session state management with `ApiClientState`
+
+**Frontend (`src/`)**: 
+- `services/ApstraApiService.ts`: TypeScript service layer for API communication
+- `utils/apstraUrls.ts`: URL generation utilities for Apstra web interface navigation
+- Type-safe API interfaces with proper error handling
+
+### Key Services and Utilities
+
+**ApstraApiService.ts** - Centralized API communication:
+```typescript
+interface LoginInfo { base_url, username, password, session_id }
+interface SystemSearchRequest { session_id, blueprint_id, server_name }
+interface QueryResponse { items: Array<object>, count: number }
+```
+
+**apstraUrls.ts** - URL generation utilities:
+```typescript
+generateApstraUrls.system({ host, blueprintId, nodeId }) // System detail page
+generateApstraUrls.blueprint({ host, blueprintId }) // Blueprint staged page
+generateApstraUrls.interface({ host, blueprintId, nodeId }) // Interface detail page
+```
+
+### Development Best Practices
+- **Session Management**: Use stateful authentication with proper session token handling
+- **API Error Handling**: Implement comprehensive error handling with user-friendly messages
+- **Type Safety**: Maintain type safety across frontend/backend API boundaries
+- **URL Generation**: Use utility functions for consistent Apstra URL generation
+- **State Management**: Leverage Tauri's state management for API client persistence
+
 ## Important Notes
 
 - Update SPECIFICATION.md whenever new decisions are added/updated
 - Follow the phased development approach outlined in SPECIFICATION.md
 - Maintain security best practices for file handling and temporary storage
+- **Implement proper session management** for Apstra API authentication
+- **Use centralized service utilities** to prevent code duplication
 - Document failure-prone patterns to prevent regressions
-- Test both success and failure scenarios thoroughly
+- Test both success and failure scenarios thoroughly, especially API integration

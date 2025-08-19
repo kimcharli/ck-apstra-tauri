@@ -167,9 +167,11 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
             if field_matched { break; }
             
             let header_lower = header.to_lowercase()
-                .replace('\r', "")  // Remove carriage returns
-                .replace('\n', "")  // Remove line feeds
-                .trim().to_string();
+                .replace('\r', " ")  // Replace carriage returns with spaces
+                .replace('\n', " ")  // Replace line feeds with spaces
+                .split_whitespace()  // Split by any whitespace and rejoin with single spaces
+                .collect::<Vec<&str>>()
+                .join(" ");
             
             for variation in &sorted_variations {
                 let variation_lower = variation.to_lowercase();
@@ -203,9 +205,11 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
     // Helper function to normalize headers for comparison
     let normalize_header = |header: &str| -> String {
         header.to_lowercase()
-            .replace('\r', "")  // Remove carriage returns
-            .replace('\n', "")  // Remove line feeds
-            .trim().to_string()
+            .replace('\r', " ")  // Replace carriage returns with spaces
+            .replace('\n', " ")  // Replace line feeds with spaces
+            .split_whitespace()  // Split by any whitespace and rejoin with single spaces
+            .collect::<Vec<&str>>()
+            .join(" ")
     };
     
     // Use conversion map to map Excel headers to target fields
@@ -304,7 +308,7 @@ fn convert_to_network_config_row(
     let get_field = |field_name: &str| -> Option<String> {
         let result = field_map.get(field_name)
             .and_then(|header| row_data.get(header))
-            .filter(|value| !value.is_empty())
+            .filter(|value| !value.trim().is_empty())  // Check trimmed value
             .map(|s| s.to_string());
         
         if result.is_none() {
@@ -361,4 +365,233 @@ pub async fn validate_data(data: Vec<NetworkConfigRow>) -> Result<Vec<NetworkCon
     // TODO: Implement additional validation rules
     
     Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use crate::models::conversion_map::ConversionMap;
+    use calamine::{Range, DataType};
+
+    fn create_test_conversion_map() -> ConversionMap {
+        let mut mappings = HashMap::new();
+        mappings.insert("Switch Name".to_string(), "switch_label".to_string());
+        mappings.insert("Port".to_string(), "switch_ifname".to_string());
+        mappings.insert("Host Name".to_string(), "server_label".to_string());
+        mappings.insert("Slot/Port".to_string(), "server_ifname".to_string());
+        mappings.insert("Speed\n(GB)".to_string(), "link_speed".to_string());
+        mappings.insert("External".to_string(), "is_external".to_string());
+        
+        ConversionMap::new(Some(2), mappings)
+    }
+
+    fn create_test_headers() -> Vec<String> {
+        vec![
+            "Switch Name".to_string(),
+            "Port".to_string(), 
+            "Host Name".to_string(),
+            "Slot/Port".to_string(),
+            "Speed\n(GB)".to_string(),
+            "External".to_string(),
+        ]
+    }
+
+    fn create_test_row_data() -> HashMap<String, String> {
+        let mut row_data = HashMap::new();
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
+        row_data.insert("Host Name".to_string(), "server01".to_string());
+        row_data.insert("Slot/Port".to_string(), "eth0".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "10".to_string());
+        row_data.insert("External".to_string(), "false".to_string());
+        row_data
+    }
+
+    #[test]
+    fn test_create_conversion_field_mapping_exact_match() {
+        let headers = create_test_headers();
+        let conversion_map = create_test_conversion_map();
+        
+        let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
+        
+        // Verify exact matches
+        assert_eq!(field_map.get("switch_label"), Some(&"Switch Name".to_string()));
+        assert_eq!(field_map.get("switch_ifname"), Some(&"Port".to_string()));
+        assert_eq!(field_map.get("server_label"), Some(&"Host Name".to_string()));
+        assert_eq!(field_map.get("server_ifname"), Some(&"Slot/Port".to_string()));
+        assert_eq!(field_map.get("link_speed"), Some(&"Speed\n(GB)".to_string()));
+        assert_eq!(field_map.get("is_external"), Some(&"External".to_string()));
+    }
+
+    #[test]
+    fn test_create_conversion_field_mapping_normalized_headers() {
+        let headers = vec![
+            "SWITCH NAME".to_string(),
+            "  port  ".to_string(), 
+            "Host\r\nName".to_string(), // With carriage return + line feed (more realistic)
+            "slot/port".to_string(), // Different case
+        ];
+        
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
+        
+        // Verify normalization works - should match after case/whitespace/line ending normalization
+        assert_eq!(field_map.get("switch_label"), Some(&"SWITCH NAME".to_string()));
+        assert_eq!(field_map.get("switch_ifname"), Some(&"  port  ".to_string()));
+        // Host\r\nName should match "Host Name" after normalization (line endings removed)
+        assert_eq!(field_map.get("server_label"), Some(&"Host\r\nName".to_string()));
+        assert_eq!(field_map.get("server_ifname"), Some(&"slot/port".to_string()));
+    }
+
+    #[test]
+    fn test_create_field_mapping_with_variations() {
+        let headers = vec![
+            "Switch".to_string(), // Should match switch_label variation
+            "Interface".to_string(), // Should match switch_ifname variation
+            "Server".to_string(), // Should match server_label variation
+            "NIC".to_string(), // Should match server_ifname variation
+        ];
+        
+        let field_map = create_field_mapping(&headers);
+        
+        // Verify field variations work
+        assert_eq!(field_map.get("switch_label"), Some(&"Switch".to_string()));
+        assert_eq!(field_map.get("switch_ifname"), Some(&"Interface".to_string()));
+        assert_eq!(field_map.get("server_label"), Some(&"Server".to_string()));
+        assert_eq!(field_map.get("server_ifname"), Some(&"NIC".to_string()));
+    }
+
+    #[test]
+    fn test_convert_to_network_config_row_valid() {
+        let row_data = create_test_row_data();
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        
+        assert_eq!(row.switch_label, Some("switch01".to_string()));
+        assert_eq!(row.switch_ifname, Some("xe-0/0/1".to_string()));
+        assert_eq!(row.server_label, Some("server01".to_string()));
+        assert_eq!(row.server_ifname, Some("eth0".to_string()));
+        assert_eq!(row.link_speed, Some("10".to_string()));
+        assert_eq!(row.is_external, Some(false));
+        assert_eq!(row.blueprint, None); // Blueprint should always be None
+    }
+
+    #[test]
+    fn test_convert_to_network_config_row_missing_required_fields() {
+        let mut row_data = HashMap::new();
+        row_data.insert("Host Name".to_string(), "server01".to_string());
+        // Missing both switch_label and switch_ifname
+        
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        
+        assert!(network_row.is_none()); // Should be None due to missing required fields
+    }
+
+    #[test]
+    fn test_convert_to_network_config_row_empty_values() {
+        let mut row_data = HashMap::new();
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
+        row_data.insert("Host Name".to_string(), "".to_string()); // Empty value
+        row_data.insert("Slot/Port".to_string(), "   ".to_string()); // Whitespace only
+        
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        
+        assert_eq!(row.switch_label, Some("switch01".to_string()));
+        assert_eq!(row.switch_ifname, Some("xe-0/0/1".to_string()));
+        assert_eq!(row.server_label, None); // Empty value should be None
+        assert_eq!(row.server_ifname, None); // Whitespace-only should be None
+    }
+
+    #[test]
+    fn test_boolean_field_parsing() {
+        let mut row_data = HashMap::new();
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
+        row_data.insert("External".to_string(), "true".to_string());
+        
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        let row = network_row.unwrap();
+        assert_eq!(row.is_external, Some(true));
+        
+        // Test different boolean representations
+        let test_cases = vec![
+            ("true", Some(true)),
+            ("TRUE", Some(true)),
+            ("yes", Some(true)),
+            ("YES", Some(true)),
+            ("1", Some(true)),
+            ("y", Some(true)),
+            ("false", Some(false)),
+            ("FALSE", Some(false)),
+            ("no", Some(false)),
+            ("NO", Some(false)),
+            ("0", Some(false)),
+            ("n", Some(false)),
+            ("maybe", None),
+            ("invalid", None),
+        ];
+        
+        for (input, expected) in test_cases {
+            let mut test_row_data = row_data.clone();
+            test_row_data.insert("External".to_string(), input.to_string());
+            
+            let test_network_row = convert_to_network_config_row(&test_row_data, &field_map);
+            let test_row = test_network_row.unwrap();
+            assert_eq!(test_row.is_external, expected, "Failed for input: '{}'", input);
+        }
+    }
+
+    #[test]
+    fn test_header_priority_matching() {
+        // Test that longer, more specific headers are preferred
+        let headers = vec![
+            "Slot".to_string(), 
+            "Slot/Port".to_string(), // This should be preferred for server_ifname
+        ];
+        
+        let field_map = create_field_mapping(&headers);
+        
+        // Should prefer "Slot/Port" over "Slot" for server_ifname
+        assert_eq!(field_map.get("server_ifname"), Some(&"Slot/Port".to_string()));
+    }
+
+    #[test]
+    fn test_normalization_function() {
+        let normalize_header = |header: &str| -> String {
+            header.to_lowercase()
+                .replace('\r', " ")  // Replace with spaces
+                .replace('\n', " ")  // Replace with spaces
+                .split_whitespace()  // Split by any whitespace and rejoin with single spaces
+                .collect::<Vec<&str>>()
+                .join(" ")
+        };
+        
+        // Test that these normalize to the same value
+        let normalized1 = normalize_header("Host\r\nName");
+        let normalized2 = normalize_header("Host Name");
+        
+        println!("'Host\\r\\nName' normalizes to: '{}'", normalized1);
+        println!("'Host Name' normalizes to: '{}'", normalized2);
+        
+        assert_eq!(normalized1, normalized2, "Headers should normalize to the same value");
+    }
 }
