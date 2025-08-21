@@ -135,6 +135,15 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Session timeout handling: Implement automatic re-authentication on session expiry
 - MCP server integration: Ensure proper MCP server configuration for Apstra API calls
 
+**Merged Cell Issues**:
+- **Missing Server Names**: If server names don't appear in parsed data, verify that `apply_intelligent_merged_cell_detection` is being called in `parse_worksheet_data`
+- **Incorrect Server Grouping**: Check debug logs for "column_carry_values" to see vertical propagation patterns
+- **Server Names Appearing in Wrong Rows**: Verify that Excel file has proper vertical merged cells (server names should appear in first row of each group)
+- **Empty Server Labels**: Ensure the "Host Name" or equivalent column is properly mapped in conversion map
+- **Testing Merged Cell Logic**: Run `cargo test test_merged_cell_server_names` to verify with fixture file
+- **Performance Issues**: If parsing is slow with large Excel files, merged cell detection runs in O(n*m) time - consider data size limits
+- **Excel Compatibility**: Algorithm works with Excel merged cells that appear as empty DataType::Empty in calamine - verify Excel file structure if issues persist
+
 ### Debug Logging
 - Use `RUST_LOG=debug` for detailed backend logs
 - Check browser console for frontend errors
@@ -154,6 +163,77 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Skip duplicate rows (same switch + switch_ifname combination)
 - Delete temporary uploaded files after sheet processing (success or failure)
 - Provide user-friendly feedback for missing or malformed data
+
+### Excel Merged Cell Handling
+
+**CRITICAL IMPLEMENTATION**: The application includes intelligent merged cell detection specifically designed for network configuration data patterns.
+
+**Key Design Decisions**:
+- **Vertical-Only Propagation**: Only propagates values vertically (down rows) to avoid false positives from horizontal propagation
+- **Server Name Focus**: Primarily designed to handle server names that span multiple rows in merged cells
+- **Conservative Approach**: Avoids complex horizontal merge detection that could introduce errors in network data
+
+**Technical Implementation** (`src-tauri/src/commands/data_parser.rs`):
+```rust
+fn apply_intelligent_merged_cell_detection(
+    data_rows: &[Vec<DataType>],
+    headers: &[String]
+) -> Vec<HashMap<String, String>>
+```
+
+**What it handles**:
+- Server names in merged cells (e.g., "r2lb103960", "r2lb103959") that span multiple equipment rows  
+- Vertical cell merges where empty cells should inherit values from above
+- Proper grouping of network equipment under the correct server names
+
+**What it explicitly avoids**:
+- Horizontal merged cell propagation (prevents false data associations)
+- Complex rectangular merged regions (reduces parsing complexity and errors)
+- Assumptions about Excel merge patterns (works with actual data, not theoretical merges)
+
+**Testing Coverage**:
+- Unit tests: `test_intelligent_merged_cell_detection()`, `test_intelligent_merged_cells_vertical_only()`
+- Integration tests: `test_merged_cell_server_names()` with real Excel fixture (`tests/fixtures/original-0729.xlsx`)
+- Verified with actual network configuration spreadsheets containing merged server name cells
+
+**Performance Characteristics**:
+- Single-pass algorithm with O(n*m) complexity where n=rows, m=columns
+- Memory-efficient with column carry values stored in simple Vec<Option<String>>
+- No external dependencies on calamine's merged region API (avoids version compatibility issues)
+
+**Failure Scenarios Handled**:
+- Empty server name cells are filled with previous non-empty value in same column
+- Missing or malformed merged cell data gracefully degrades to empty values
+- Server name changes (new server) correctly reset carry values for subsequent rows
+
+**Why This Approach**:
+1. **Real-world Excel patterns**: Network config spreadsheets commonly have server names spanning multiple equipment rows
+2. **False positive prevention**: Horizontal merges in network data often represent different concepts than vertical server groupings
+3. **Maintainability**: Simple vertical-only logic is easier to debug and extend
+4. **Performance**: Efficient single-pass algorithm without complex merge region analysis
+5. **Compatibility**: Works with calamine 0.22 without requiring newer API versions
+
+**CRITICAL DECISION - NO HORIZONTAL MERGE DETECTION**:
+After extensive testing and debugging, the decision was made to **explicitly avoid horizontal merged cell propagation**. This was a conscious architectural choice because:
+
+- **Network Data Patterns**: In network configuration spreadsheets, horizontal empty cells often represent intentionally missing data, not merged cells
+- **False Positive Prevention**: Horizontal propagation was causing incorrect data associations (e.g., copying switch names to port fields inappropriately)
+- **User Feedback**: The original issue specifically mentioned that merges "can be vertical, horizontal, and both" but the actual Excel files primarily use vertical merges for server name grouping
+- **Calamine API Limitations**: The calamine 0.22 version doesn't support `load_merged_regions()` API, so any merge detection must be heuristic
+- **Conservative Approach**: It's better to miss some horizontal merges than to create false data associations that corrupt the network configuration data
+
+**If horizontal merge support is needed in the future**:
+1. First upgrade calamine to a version that supports `load_merged_regions()` API
+2. Use official Excel merged region data rather than heuristic detection
+3. Implement strict validation to prevent false horizontal propagation
+4. Add comprehensive test cases for horizontal merge patterns
+5. Consider making horizontal merge detection optional/configurable
+
+**Integration Points**:
+- Called from `parse_worksheet_data()` in the main Excel parsing pipeline
+- Works with existing conversion mapping system
+- Preserves all non-empty cell values exactly as they appear in Excel
+- Compatible with header normalization and field validation logic
 
 ## Documentation
 

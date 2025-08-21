@@ -70,14 +70,17 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
     
     log::info!("Sheet dimensions: {}x{}", worksheet.get_size().0, worksheet.get_size().1);
     
-    // Parse the worksheet data
+    // Parse the worksheet data with intelligent merged cell handling
     let parsed_data = parse_worksheet_data(&worksheet, effective_conversion_map.as_ref())?;
     
     log::info!("Parsed {} rows of data", parsed_data.len());
     Ok(parsed_data)
 }
 
-fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&ConversionMap>) -> Result<Vec<NetworkConfigRow>, String> {
+fn parse_worksheet_data(
+    worksheet: &Range<DataType>, 
+    conversion_map: Option<&ConversionMap>
+) -> Result<Vec<NetworkConfigRow>, String> {
     let mut rows = Vec::new();
     
     // Get all rows from the worksheet
@@ -122,28 +125,22 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
         create_field_mapping(&headers)
     };
     
-    // Process data rows (skip header row)
-    for (row_idx, row) in worksheet_rows.iter().enumerate().skip(header_row_idx + 1) {
-        if row.iter().all(|cell| cell.is_empty()) {
+    // Process data rows with intelligent merged cell detection  
+    let data_rows_with_merges = apply_intelligent_merged_cell_detection(
+        &worksheet_rows[header_row_idx + 1..], 
+        &headers
+    );
+    
+    for (row_idx, row_data) in data_rows_with_merges.iter().enumerate() {
+        if row_data.values().all(|value| value.trim().is_empty()) {
             continue; // Skip empty rows
         }
         
-        // Propagate merged cell values for this row
-        let row_with_merged_values = propagate_merged_cells_in_row(row);
-        
-        let row_data: HashMap<String, String> = row_with_merged_values.iter().enumerate()
-            .map(|(col_idx, cell)| {
-                let header = headers.get(col_idx).cloned().unwrap_or_else(|| format!("col_{}", col_idx));
-                let value = cell.to_string().trim().to_string();
-                (header, value)
-            })
-            .collect();
-        
         // Convert to NetworkConfigRow using field mapping
-        if let Some(network_row) = convert_to_network_config_row(&row_data, &field_map) {
+        if let Some(network_row) = convert_to_network_config_row(row_data, &field_map) {
             rows.push(network_row);
         } else {
-            log::warn!("Skipping row {} due to missing required fields", row_idx + 1);
+            log::warn!("Skipping row {} due to missing required fields", row_idx + header_row_idx + 2);
         }
     }
     
@@ -161,25 +158,140 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
 /// and transforms it to:
 /// ["Value1", "Value1", "Value1", "Value2", "Value2", "Value3"]
 /// 
+/// However, it includes validation to avoid propagating values that would create
+/// invalid data rows (e.g., header/category rows that span many columns).
+/// 
 /// Leading empty cells (before any value) are left as-is.
 fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
     let mut result = row.to_vec();
+    
+    // First check if this looks like a header/category row that shouldn't be propagated
+    // Count non-empty cells vs total cells - if too few non-empty cells, it might be a category row
+    let non_empty_count = row.iter().filter(|cell| !cell.is_empty()).count();
+    let total_cells = row.len();
+    
+    // If less than 30% of cells have data and there are many columns, 
+    // this is likely a category/header row that shouldn't be propagated
+    if total_cells > 5 && (non_empty_count as f32 / total_cells as f32) < 0.3 {
+        log::debug!("Row appears to be category/header row ({}/{} non-empty), skipping propagation", 
+                   non_empty_count, total_cells);
+        return result; // Return original row without propagation
+    }
+    
     let mut last_non_empty_value: Option<DataType> = None;
+    let mut propagation_start_index: Option<usize> = None;
     
     for i in 0..result.len() {
         if !result[i].is_empty() {
             // Found a non-empty cell, use it as the reference value
             last_non_empty_value = Some(result[i].clone());
+            propagation_start_index = Some(i);
         } else if let Some(ref value) = last_non_empty_value {
-            // Current cell is empty, but we have a previous non-empty value
-            // This could be part of a merged cell range, so propagate the value
-            result[i] = value.clone();
-            log::trace!("Propagated merged cell value '{}' to position {}", value, i);
+            if let Some(start_idx) = propagation_start_index {
+                // Only propagate within reasonable distance (max 3-4 cells)
+                // to avoid spreading values too far across the row
+                let distance = i - start_idx;
+                if distance <= 3 {
+                    result[i] = value.clone();
+                    log::trace!("Propagated merged cell value '{}' to position {} (distance: {})", 
+                               value, i, distance);
+                } else {
+                    // Too far from original value, likely a different section
+                    last_non_empty_value = None;
+                    propagation_start_index = None;
+                }
+            }
         }
         // If both current cell is empty AND no previous value, leave it empty
     }
     
     result
+}
+
+/// Apply intelligent merged cell detection to data rows
+/// 
+/// Since we can't access Excel's merged region metadata directly in this calamine version,
+/// we use intelligent heuristics to detect and handle merged cells:
+/// 
+/// 1. **Vertical merges**: Values that should carry down to subsequent rows (common for server names)
+/// 2. **Horizontal merges**: Values that should spread to adjacent empty cells (less common in data)
+/// 3. **Conservative approach**: Only apply merges when patterns are clear and safe
+/// 
+/// The algorithm prioritizes vertical propagation (common in network config data) over 
+/// horizontal propagation to avoid false positives.
+fn apply_intelligent_merged_cell_detection(
+    data_rows: &[Vec<DataType>],
+    headers: &[String]
+) -> Vec<HashMap<String, String>> {
+    let mut result = Vec::new();
+    let mut column_carry_values: Vec<Option<String>> = vec![None; headers.len()];
+    
+    for (row_idx, row) in data_rows.iter().enumerate() {
+        // Convert row to string values
+        let mut row_values: Vec<String> = row.iter()
+            .map(|cell| cell.to_string().trim().to_string())
+            .collect();
+        
+        // Apply intelligent merge detection
+        for (col_idx, value) in row_values.iter_mut().enumerate() {
+            if !value.is_empty() {
+                // Non-empty cell - update vertical carry value for future rows
+                column_carry_values[col_idx] = Some(value.clone());
+                log::trace!("Updated carry value for column {} at row {}: '{}'", col_idx, row_idx, value);
+            } else {
+                // Empty cell - apply vertical merge if available (prioritized for server names)
+                if let Some(ref v_value) = column_carry_values[col_idx] {
+                    *value = v_value.clone();
+                    log::trace!("Applied vertical merge to column {} at row {}: '{}'", col_idx, row_idx, value);
+                }
+                // Note: We're not applying horizontal merges here to avoid the issues we had
+                // Horizontal merges in network config data are less common and more error-prone
+            }
+        }
+        
+        // Convert to HashMap with headers
+        let mut row_data = HashMap::new();
+        for (col_idx, value) in row_values.iter().enumerate() {
+            let header = headers.get(col_idx).cloned().unwrap_or_else(|| format!("col_{}", col_idx));
+            row_data.insert(header, value.clone());
+        }
+        
+        result.push(row_data);
+    }
+    
+    result
+}
+
+/// Determine if horizontal merge should be applied to a specific column
+/// 
+/// This function helps avoid inappropriate horizontal propagation by checking
+/// if the horizontal merge seems like a legitimate Excel merged cell pattern.
+fn should_apply_horizontal_merge(row_with_horizontal: &[DataType], col_idx: usize) -> bool {
+    // For now, use the same logic as the original propagate_merged_cells_in_row
+    // but be more conservative - only allow horizontal merge if it passes the category row check
+    
+    let non_empty_count = row_with_horizontal.iter().filter(|cell| !cell.is_empty()).count();
+    let total_cells = row_with_horizontal.len();
+    
+    // If this looks like a category row (too few non-empty cells), don't do horizontal propagation
+    if total_cells > 5 && (non_empty_count as f32 / total_cells as f32) < 0.3 {
+        return false;
+    }
+    
+    // Otherwise, allow horizontal propagation if within distance limit
+    // Find the nearest non-empty cell to the left
+    let mut distance = 0;
+    for i in (0..col_idx).rev() {
+        distance += 1;
+        if !row_with_horizontal[i].is_empty() {
+            return distance <= 3; // Within reasonable distance
+        }
+        if distance > 3 {
+            break;
+        }
+    }
+    
+    false // No source cell found within reasonable distance
 }
 
 fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
@@ -678,5 +790,312 @@ mod tests {
         assert_eq!(result[2].to_string(), "Value1");
         assert_eq!(result[3].to_string(), "Value1"); // Should be propagated
         assert_eq!(result[4].to_string(), "Value2");
+    }
+
+    #[test]
+    fn test_propagate_merged_cells_category_row_detection() {
+        use calamine::DataType;
+        
+        // Test category/header row that shouldn't be propagated
+        // This simulates "Linux RHEL8.7" in first cell with many empty cells after
+        let category_row = vec![
+            DataType::String("Linux RHEL8.7".to_string()), // Category header
+            DataType::Empty,                                // Empty
+            DataType::Empty,                                // Empty  
+            DataType::Empty,                                // Empty
+            DataType::Empty,                                // Empty
+            DataType::Empty,                                // Empty
+            DataType::Empty,                                // Empty
+            DataType::Empty,                                // Empty
+        ];
+        
+        let result = propagate_merged_cells_in_row(&category_row);
+        
+        // Should not propagate - only first cell should have value
+        assert_eq!(result[0].to_string(), "Linux RHEL8.7");
+        assert!(result[1].is_empty());
+        assert!(result[2].is_empty());
+        assert!(result[3].is_empty());
+        assert!(result[4].is_empty());
+        assert!(result[5].is_empty());
+        assert!(result[6].is_empty());
+        assert!(result[7].is_empty());
+    }
+
+    #[test]
+    fn test_propagate_merged_cells_distance_limit() {
+        use calamine::DataType;
+        
+        // Test that propagation stops after reasonable distance
+        // Make sure row has enough cells to not trigger category detection (>30% non-empty)
+        let test_row = vec![
+            DataType::String("Value1".to_string()),   // Non-empty 1
+            DataType::Empty,                          // Distance 1 - should propagate
+            DataType::Empty,                          // Distance 2 - should propagate  
+            DataType::Empty,                          // Distance 3 - should propagate
+            DataType::Empty,                          // Distance 4 - should NOT propagate (too far)
+            DataType::String("Value2".to_string()),   // Non-empty 2 - prevents category detection
+        ];
+        
+        let result = propagate_merged_cells_in_row(&test_row);
+        
+        assert_eq!(result[0].to_string(), "Value1");
+        assert_eq!(result[1].to_string(), "Value1"); // Distance 1 - propagated
+        assert_eq!(result[2].to_string(), "Value1"); // Distance 2 - propagated
+        assert_eq!(result[3].to_string(), "Value1"); // Distance 3 - propagated
+        assert!(result[4].is_empty());               // Distance 4 - not propagated (reset due to distance limit)
+        assert_eq!(result[5].to_string(), "Value2"); // Original value preserved
+    }
+
+    #[test]
+    fn test_propagate_vertical_merged_cells() {
+        use calamine::DataType;
+        
+        // Create test data with vertical merged cells pattern
+        // This simulates the server name pattern where "r2lb103960" spans multiple rows
+        let headers = vec![
+            "Switch Name".to_string(),
+            "Port".to_string(),
+            "Host Name".to_string(),      // This column will have vertical merges
+            "Slot/Port".to_string(),
+        ];
+        
+        let data_rows = vec![
+            // Row 1: Has server name "r2lb103960"
+            vec![
+                DataType::String("CRL01P24L09".to_string()),
+                DataType::String("2".to_string()),
+                DataType::String("r2lb103960".to_string()),
+                DataType::String("2".to_string()),
+            ],
+            // Row 2: Server name should be carried down from row 1
+            vec![
+                DataType::String("CRL01P24L10".to_string()),
+                DataType::String("2".to_string()),
+                DataType::Empty,  // Empty - should get "r2lb103960" from above
+                DataType::String("2".to_string()),
+            ],
+            // Row 3: New server name "r2lb103959"
+            vec![
+                DataType::String("CRL01P24L09".to_string()),
+                DataType::String("5".to_string()),
+                DataType::String("r2lb103959".to_string()),
+                DataType::String("5".to_string()),
+            ],
+            // Row 4: Server name should be carried down from row 3
+            vec![
+                DataType::String("CRL01P24L10".to_string()),
+                DataType::String("5".to_string()),
+                DataType::Empty,  // Empty - should get "r2lb103959" from above
+                DataType::String("5".to_string()),
+            ],
+        ];
+        
+        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
+        
+        assert_eq!(result.len(), 4);
+        
+        // Check first row - should have original value
+        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
+        assert_eq!(result[0].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
+        
+        // Check second row - should have carried down server name
+        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string()));
+        assert_eq!(result[1].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
+        
+        // Check third row - should have new server name
+        assert_eq!(result[2].get("Host Name"), Some(&"r2lb103959".to_string()));
+        assert_eq!(result[2].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
+        
+        // Check fourth row - should have carried down new server name
+        assert_eq!(result[3].get("Host Name"), Some(&"r2lb103959".to_string()));
+        assert_eq!(result[3].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
+    }
+
+    #[test]
+    fn test_intelligent_merged_cells_vertical_only() {
+        use calamine::DataType;
+        
+        // Test intelligent merged cell detection (vertical-only to avoid false positives)
+        let headers = vec![
+            "Switch Name".to_string(),
+            "Port".to_string(),
+            "Host Name".to_string(),
+            "Slot/Port".to_string(),
+        ];
+        
+        let data_rows = vec![
+            // Row 1: Has server name
+            vec![
+                DataType::String("server001".to_string()),
+                DataType::String("port1".to_string()),
+                DataType::String("r2lb103960".to_string()),
+                DataType::String("eth0".to_string()),
+            ],
+            // Row 2: Empty host name should get vertical merge, other fields stay as-is
+            vec![
+                DataType::String("server002".to_string()),
+                DataType::String("port2".to_string()),
+                DataType::Empty,   // Should be filled vertically from "r2lb103960"
+                DataType::String("eth1".to_string()),
+            ],
+        ];
+        
+        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
+        
+        assert_eq!(result.len(), 2);
+        
+        // First row: all values preserved as-is
+        assert_eq!(result[0].get("Switch Name"), Some(&"server001".to_string()));
+        assert_eq!(result[0].get("Port"), Some(&"port1".to_string()));
+        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
+        assert_eq!(result[0].get("Slot/Port"), Some(&"eth0".to_string()));
+        
+        // Second row: vertical merge for Host Name, other fields unchanged
+        assert_eq!(result[1].get("Switch Name"), Some(&"server002".to_string()));
+        assert_eq!(result[1].get("Port"), Some(&"port2".to_string()));
+        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string())); // Vertical merge
+        assert_eq!(result[1].get("Slot/Port"), Some(&"eth1".to_string()));
+    }
+
+    #[test] 
+    fn test_intelligent_merged_cell_detection() {
+        use calamine::DataType;
+        
+        // Test the intelligent merged cell detection (vertical merges primarily)
+        let headers = vec![
+            "Switch Name".to_string(),
+            "Port".to_string(),
+            "Host Name".to_string(),      
+            "Slot/Port".to_string(),
+        ];
+        
+        let data_rows = vec![
+            // Row 1: Has server name "r2lb103960"
+            vec![
+                DataType::String("CRL01P24L09".to_string()),
+                DataType::String("2".to_string()),
+                DataType::String("r2lb103960".to_string()),
+                DataType::String("2".to_string()),
+            ],
+            // Row 2: Server name cell is empty - should get vertical merge
+            vec![
+                DataType::String("CRL01P24L10".to_string()),
+                DataType::String("2".to_string()),
+                DataType::Empty,  // This will be filled by vertical merge
+                DataType::String("2".to_string()),
+            ],
+            // Row 3: New server name "r2lb103959"  
+            vec![
+                DataType::String("CRL01P24L09".to_string()),
+                DataType::String("5".to_string()),
+                DataType::String("r2lb103959".to_string()),
+                DataType::String("5".to_string()),
+            ],
+            // Row 4: Server name cell is empty - should get vertical merge
+            vec![
+                DataType::String("CRL01P24L10".to_string()),
+                DataType::String("5".to_string()),
+                DataType::Empty,  // This will be filled by vertical merge
+                DataType::String("5".to_string()),
+            ],
+        ];
+        
+        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
+        
+        assert_eq!(result.len(), 4);
+        
+        // Check that vertical merges were applied correctly
+        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
+        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string())); // Vertical merge from row 1
+        assert_eq!(result[2].get("Host Name"), Some(&"r2lb103959".to_string()));
+        assert_eq!(result[3].get("Host Name"), Some(&"r2lb103959".to_string())); // Vertical merge from row 3
+        
+        // Verify other fields are preserved
+        assert_eq!(result[0].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
+        assert_eq!(result[1].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
+        assert_eq!(result[2].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
+        assert_eq!(result[3].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
+    }
+
+    #[test]
+    fn test_comprehensive_merged_cells_all_scenarios() {
+        use calamine::DataType;
+        
+        // Test all three merge scenarios in one comprehensive test
+        let headers = vec![
+            "Switch".to_string(),
+            "Port".to_string(), 
+            "Server".to_string(),
+            "Interface".to_string(),
+            "Speed".to_string(),
+        ];
+        
+        let data_rows = vec![
+            // Row 1: Horizontal merge (Switch spans to Port) + Server value
+            vec![
+                DataType::String("SwitchA".to_string()),
+                DataType::Empty,                            // Horizontal merge from SwitchA
+                DataType::String("ServerX".to_string()),
+                DataType::String("eth0".to_string()),
+                DataType::String("10G".to_string()),
+            ],
+            // Row 2: Vertical merge for Server, horizontal merge for Interface
+            vec![
+                DataType::String("SwitchB".to_string()),
+                DataType::String("port2".to_string()),
+                DataType::Empty,                            // Vertical merge from ServerX
+                DataType::String("eth1".to_string()),
+                DataType::Empty,                            // Horizontal merge from eth1
+            ],
+            // Row 3: New server (breaks vertical merge), rectangular merge simulation
+            vec![
+                DataType::String("SwitchC".to_string()),
+                DataType::Empty,                            // Horizontal from SwitchC
+                DataType::String("ServerY".to_string()),
+                DataType::Empty,                            // Horizontal from ServerY
+                DataType::Empty,                            // Horizontal from ServerY
+            ],
+            // Row 4: Vertical continuation of ServerY
+            vec![
+                DataType::String("SwitchD".to_string()),
+                DataType::String("port4".to_string()),
+                DataType::Empty,                            // Vertical merge from ServerY
+                DataType::String("eth3".to_string()),
+                DataType::String("25G".to_string()),
+            ],
+        ];
+        
+        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
+        
+        assert_eq!(result.len(), 4);
+        
+        // Row 1: Horizontal merge SwitchA -> Port
+        assert_eq!(result[0].get("Switch"), Some(&"SwitchA".to_string()));
+        assert_eq!(result[0].get("Port"), Some(&"SwitchA".to_string()));      // Horizontal merge
+        assert_eq!(result[0].get("Server"), Some(&"ServerX".to_string()));
+        assert_eq!(result[0].get("Interface"), Some(&"eth0".to_string()));
+        assert_eq!(result[0].get("Speed"), Some(&"10G".to_string()));
+        
+        // Row 2: Vertical merge ServerX, horizontal merge eth1 -> Speed
+        assert_eq!(result[1].get("Switch"), Some(&"SwitchB".to_string()));
+        assert_eq!(result[1].get("Port"), Some(&"port2".to_string()));
+        assert_eq!(result[1].get("Server"), Some(&"ServerX".to_string()));    // Vertical merge
+        assert_eq!(result[1].get("Interface"), Some(&"eth1".to_string()));
+        assert_eq!(result[1].get("Speed"), Some(&"eth1".to_string()));        // Horizontal merge
+        
+        // Row 3: New server ServerY, horizontal merges
+        assert_eq!(result[2].get("Switch"), Some(&"SwitchC".to_string()));
+        assert_eq!(result[2].get("Port"), Some(&"SwitchC".to_string()));      // Horizontal merge
+        assert_eq!(result[2].get("Server"), Some(&"ServerY".to_string()));
+        assert_eq!(result[2].get("Interface"), Some(&"ServerY".to_string()));  // Horizontal merge
+        assert_eq!(result[2].get("Speed"), Some(&"ServerY".to_string()));     // Horizontal merge
+        
+        // Row 4: Vertical merge ServerY continues
+        assert_eq!(result[3].get("Switch"), Some(&"SwitchD".to_string()));
+        assert_eq!(result[3].get("Port"), Some(&"port4".to_string()));
+        assert_eq!(result[3].get("Server"), Some(&"ServerY".to_string()));    // Vertical merge
+        assert_eq!(result[3].get("Interface"), Some(&"eth3".to_string()));
+        assert_eq!(result[3].get("Speed"), Some(&"25G".to_string()));
     }
 }

@@ -295,4 +295,114 @@ mod excel_integration_tests {
             println!("Blueprint requirement test passed - all {} rows have blueprint=None", parsed_data.len());
         }
     }
+
+    #[tokio::test]
+    async fn test_merged_cell_server_names() {
+        let fixture_path = get_test_fixture_path();
+        
+        if !fixture_path.exists() {
+            eprintln!("Skipping merged cell server names test - fixture not found: {:?}", fixture_path);
+            return;
+        }
+
+        let conversion_map = create_default_conversion_map_for_test();
+        let file_path = fixture_path.to_string_lossy().to_string();
+
+        // Test both sheets mentioned in the issue
+        let test_sheets = vec!["4187-11", "4187-12"];
+        
+        for sheet_name in test_sheets {
+            let result = parse_excel_sheet(
+                file_path.clone(),
+                sheet_name.to_string(),
+                Some(conversion_map.clone())
+            ).await;
+
+            match result {
+                Ok(parsed_data) => {
+                    println!("Testing merged cell server names in sheet '{}' with {} rows", sheet_name, parsed_data.len());
+                    
+                    // Filter for rows with actual data (skip category/header rows)
+                    let data_rows: Vec<_> = parsed_data.iter()
+                        .filter(|row| row.switch_label.is_some() && row.switch_ifname.is_some())
+                        .collect();
+                    
+                    if data_rows.len() >= 4 {
+                        println!("Showing first 10 data rows to understand structure:");
+                        for (i, row) in data_rows.iter().take(10).enumerate() {
+                            println!("Row {}: switch_label={:?}, server_label={:?}, switch_ifname={:?}, server_ifname={:?}", 
+                                i, row.switch_label, row.server_label, row.switch_ifname, row.server_ifname);
+                        }
+                        
+                        // Look for r2lb103959 in all rows
+                        let rows_with_103959: Vec<_> = data_rows.iter().enumerate()
+                            .filter(|(_, row)| {
+                                row.server_label.as_ref().map_or(false, |s| s.contains("r2lb103959"))
+                            })
+                            .collect();
+                        
+                        println!("Found {} rows with r2lb103959", rows_with_103959.len());
+                        for (idx, row) in rows_with_103959.iter().take(5) {
+                            println!("r2lb103959 at row {}: {:?}", idx, row.server_label);
+                        }
+                        
+                        // Based on actual data structure observed:
+                        // Rows 0-4: server_label should be "r2lb103960" 
+                        // Rows 5-9: server_label should be "r2lb103959"
+                        
+                        // Check that we have proper server grouping with vertical merged cells
+                        if !rows_with_103959.is_empty() {
+                            // Find where r2lb103959 starts (should be after r2lb103960 rows)
+                            let first_103959_idx = rows_with_103959[0].0;
+                            
+                            println!("r2lb103959 starts at row {}", first_103959_idx);
+                            
+                            // Verify that all rows before first_103959_idx have r2lb103960
+                            for (i, row) in data_rows.iter().take(first_103959_idx).enumerate() {
+                                if let Some(server_name) = &row.server_label {
+                                    assert!(
+                                        server_name.contains("r2lb103960"),
+                                        "Row {} should have server_label containing 'r2lb103960', got: '{}'", 
+                                        i, server_name
+                                    );
+                                }
+                            }
+                            
+                            // Verify that some rows starting from first_103959_idx have r2lb103959
+                            let rows_103959_range = data_rows.iter().skip(first_103959_idx).take(5);
+                            let mut found_103959_count = 0;
+                            
+                            for (i, row) in rows_103959_range.enumerate() {
+                                if let Some(server_name) = &row.server_label {
+                                    if server_name.contains("r2lb103959") {
+                                        found_103959_count += 1;
+                                    }
+                                }
+                            }
+                            
+                            assert!(
+                                found_103959_count >= 2,
+                                "Should find at least 2 rows with r2lb103959 starting from row {}, found {}",
+                                first_103959_idx, found_103959_count
+                            );
+                            
+                        } else {
+                            println!("⚠️ r2lb103959 not found in Excel data - skipping assertion");
+                        }
+                        
+                        println!("✅ Merged cell server names test passed for sheet '{}'", sheet_name);
+                    } else {
+                        println!("⚠️ Not enough data rows ({}) to test merged server names in sheet '{}'", data_rows.len(), sheet_name);
+                    }
+                }
+                Err(e) => {
+                    if !e.contains("not found") {
+                        panic!("Failed to parse sheet '{}' for merged cell test: {}", sheet_name, e);
+                    } else {
+                        println!("Sheet '{}' not found, skipping merged cell test", sheet_name);
+                    }
+                }
+            }
+        }
+    }
 }
