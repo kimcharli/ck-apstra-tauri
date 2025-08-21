@@ -521,6 +521,90 @@ fn normalize_link_speed(speed: &str) -> String {
     }
 }
 
+/// Parse speed value from normalized speed string for interface naming
+/// 
+/// Converts normalized speed strings to numeric values for comparison:
+/// - "25G" -> 25.0
+/// - "10G" -> 10.0  
+/// - "1G" -> 1.0
+/// - "100M" -> 0.1 (converted to GB equivalent)
+/// - "" or invalid -> 1.0 (default to 1G)
+/// 
+/// This enables speed-based interface prefix selection for switch interfaces.
+fn parse_speed_value(normalized_speed: &str) -> f32 {
+    let speed = normalized_speed.trim().to_uppercase();
+    
+    // Handle empty or invalid input - default to 1G
+    if speed.is_empty() {
+        return 1.0;
+    }
+    
+    // Extract numeric part and unit
+    let mut numeric_part = String::new();
+    let mut unit = String::new();
+    
+    for char in speed.chars() {
+        if char.is_ascii_digit() || char == '.' {
+            numeric_part.push(char);
+        } else {
+            unit.push(char);
+        }
+    }
+    
+    // Parse numeric value, default to 1.0 if invalid
+    let numeric_value: f32 = numeric_part.parse().unwrap_or(1.0);
+    
+    // Convert to GB equivalent based on unit
+    match unit.as_str() {
+        "G" => numeric_value,           // Gigabit as-is
+        "M" => numeric_value / 1000.0,  // Megabit to Gigabit (100M = 0.1G)
+        "T" => numeric_value * 1000.0,  // Terabit to Gigabit (rare but covered)
+        _ => numeric_value,             // Default: assume Gigabit
+    }
+}
+
+/// Check if a port value is a simple numeric port that should be transformed
+/// 
+/// Returns true for simple numeric ports like "2", "5", "1" that should
+/// be converted to interface names like "et-0/0/2".
+/// 
+/// Returns false for complex interface names that should be preserved as-is:
+/// - "xe-0/0/1", "eth0", "Port-channel1", "ae0", etc.
+fn is_simple_numeric_port(port: &str) -> bool {
+    let port = port.trim();
+    
+    // Must be non-empty and contain only digits
+    !port.is_empty() && port.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Generate interface name based on port number and link speed
+/// 
+/// Creates standardized interface names for network provisioning:
+/// - Port "2" + Speed "25G" → "et-0/0/2" (>10G = et)
+/// - Port "5" + Speed "10G" → "xe-0/0/5" (=10G = xe)  
+/// - Port "1" + Speed "1G" → "ge-0/0/1" (<10G = ge)
+/// 
+/// Only applies to simple numeric ports. Complex interface names are preserved.
+fn generate_interface_name(port: &str, normalized_speed: &str) -> String {
+    // Only transform simple numeric ports
+    if !is_simple_numeric_port(port) {
+        return port.to_string();
+    }
+    
+    let speed_value = parse_speed_value(normalized_speed);
+    
+    // Determine prefix based on speed thresholds
+    let prefix = if speed_value > 10.0 {
+        "et"  // Ethernet (25G, 40G, 100G, etc.)
+    } else if speed_value == 10.0 {
+        "xe"  // 10 Gigabit Ethernet
+    } else {
+        "ge"  // Gigabit Ethernet (1G and below)
+    };
+    
+    format!("{}-0/0/{}", prefix, port.trim())
+}
+
 fn convert_to_network_config_row(
     row_data: &HashMap<String, String>,
     field_map: &HashMap<String, String>
@@ -541,16 +625,23 @@ fn convert_to_network_config_row(
     
     // Check if we have minimum required fields (switch_label and switch_ifname)
     let switch_label = get_field("switch_label");
-    let switch_ifname = get_field("switch_ifname");
+    let raw_switch_ifname = get_field("switch_ifname");
+    
+    // Apply interface name transformation based on port and speed
+    let switch_ifname = raw_switch_ifname.clone().map(|port| {
+        let speed = get_field("link_speed").unwrap_or_else(|| "1G".to_string());
+        let normalized_speed = normalize_link_speed(&speed);
+        generate_interface_name(&port, &normalized_speed)
+    });
     
     log::debug!("Processing row - switch_label: {:?}, switch_ifname: {:?}", switch_label, switch_ifname);
     log::debug!("Available row data keys: {:?}", row_data.keys().collect::<Vec<_>>());
     log::debug!("Field map for switch fields: switch_label={:?}, switch_ifname={:?}", 
         field_map.get("switch_label"), field_map.get("switch_ifname"));
     
-    if switch_label.is_none() && switch_ifname.is_none() {
-        log::debug!("Skipping row due to missing required switch fields");
-        return None; // Skip rows without essential network info
+    if switch_label.is_none() || raw_switch_ifname.is_none() {
+        log::debug!("Skipping row due to missing required switch fields (switch_label: {:?}, switch_ifname: {:?})", switch_label, raw_switch_ifname);
+        return None; // Skip rows without essential network info  
     }
     
     Some(NetworkConfigRow {
@@ -581,10 +672,13 @@ fn convert_to_network_config_row(
 pub async fn validate_data(data: Vec<NetworkConfigRow>) -> Result<Vec<NetworkConfigRow>, String> {
     log::info!("Validating {} rows of data", data.len());
     
-    // TODO: Implement duplicate detection (same switch + switch_ifname)
-    // TODO: Implement additional validation rules
+    // Filter to only include rows with both switch_label and switch_ifname defined
+    let filtered_data: Vec<NetworkConfigRow> = data.into_iter()
+        .filter(|row| row.switch_label.is_some() && row.switch_ifname.is_some())
+        .collect();
     
-    Ok(data)
+    log::info!("Filtered to {} rows with both switch name and interface defined", filtered_data.len());
+    Ok(filtered_data)
 }
 
 #[cfg(test)]
@@ -1201,5 +1295,212 @@ mod tests {
         // Test edge cases
         assert_eq!(normalize_link_speed("  25GB  "), "25G");
         assert_eq!(normalize_link_speed("25"), "25G");
+    }
+
+    #[test]
+    fn test_parse_speed_value() {
+        // Test standard normalized speeds
+        assert_eq!(parse_speed_value("25G"), 25.0);
+        assert_eq!(parse_speed_value("10G"), 10.0);
+        assert_eq!(parse_speed_value("1G"), 1.0);
+        
+        // Test Megabit speeds (converted to GB)
+        assert_eq!(parse_speed_value("100M"), 0.1);  // 100M = 0.1G
+        assert_eq!(parse_speed_value("1000M"), 1.0); // 1000M = 1G
+        
+        // Test decimal values
+        assert_eq!(parse_speed_value("2.5G"), 2.5);
+        assert_eq!(parse_speed_value("0.5G"), 0.5);
+        
+        // Test edge cases
+        assert_eq!(parse_speed_value(""), 1.0);      // Empty -> default 1G
+        assert_eq!(parse_speed_value(" "), 1.0);     // Whitespace -> default 1G  
+        assert_eq!(parse_speed_value("invalid"), 1.0); // Invalid -> default 1G
+        assert_eq!(parse_speed_value("G"), 1.0);     // No number -> default 1G
+        
+        // Test case insensitive
+        assert_eq!(parse_speed_value("25g"), 25.0);
+        assert_eq!(parse_speed_value("100m"), 0.1);
+        
+        // Test with whitespace
+        assert_eq!(parse_speed_value(" 10G "), 10.0);
+        assert_eq!(parse_speed_value("  25G  "), 25.0);
+        
+        // Test Terabit (rare but covered)
+        assert_eq!(parse_speed_value("1T"), 1000.0); // 1T = 1000G
+    }
+
+    #[test]
+    fn test_is_simple_numeric_port() {
+        // Test simple numeric ports (should transform)
+        assert!(is_simple_numeric_port("2"));
+        assert!(is_simple_numeric_port("5"));
+        assert!(is_simple_numeric_port("1"));
+        assert!(is_simple_numeric_port("10"));
+        assert!(is_simple_numeric_port("48"));
+        
+        // Test with whitespace (should still work)
+        assert!(is_simple_numeric_port(" 2 "));
+        assert!(is_simple_numeric_port("  5  "));
+        
+        // Test complex interface names (should NOT transform)
+        assert!(!is_simple_numeric_port("xe-0/0/1"));
+        assert!(!is_simple_numeric_port("eth0"));
+        assert!(!is_simple_numeric_port("Port-channel1"));
+        assert!(!is_simple_numeric_port("ae0"));
+        assert!(!is_simple_numeric_port("ge-0/0/2"));
+        assert!(!is_simple_numeric_port("et-0/0/3"));
+        
+        // Test edge cases (should NOT transform)
+        assert!(!is_simple_numeric_port(""));
+        assert!(!is_simple_numeric_port(" "));
+        assert!(!is_simple_numeric_port("2a"));
+        assert!(!is_simple_numeric_port("a2"));
+        assert!(!is_simple_numeric_port("2.5"));
+        assert!(!is_simple_numeric_port("2-1"));
+    }
+
+    #[test]
+    fn test_generate_interface_name() {
+        // Test speed-based interface generation for simple numeric ports
+        
+        // >10G should use "et-" prefix
+        assert_eq!(generate_interface_name("2", "25G"), "et-0/0/2");
+        assert_eq!(generate_interface_name("5", "40G"), "et-0/0/5");
+        assert_eq!(generate_interface_name("1", "100G"), "et-0/0/1");
+        assert_eq!(generate_interface_name("48", "25G"), "et-0/0/48");
+        
+        // =10G should use "xe-" prefix  
+        assert_eq!(generate_interface_name("3", "10G"), "xe-0/0/3");
+        assert_eq!(generate_interface_name("7", "10G"), "xe-0/0/7");
+        
+        // <10G should use "ge-" prefix
+        assert_eq!(generate_interface_name("1", "1G"), "ge-0/0/1");
+        assert_eq!(generate_interface_name("4", "1G"), "ge-0/0/4");
+        assert_eq!(generate_interface_name("8", "100M"), "ge-0/0/8");  // 100M = 0.1G < 10G
+        
+        // Test with whitespace in port numbers
+        assert_eq!(generate_interface_name(" 2 ", "25G"), "et-0/0/2");
+        assert_eq!(generate_interface_name("  5  ", "10G"), "xe-0/0/5");
+        
+        // Test edge cases - missing/invalid speeds should default to ge- (1G)
+        assert_eq!(generate_interface_name("2", ""), "ge-0/0/2");         // Empty speed
+        assert_eq!(generate_interface_name("3", "invalid"), "ge-0/0/3");  // Invalid speed
+        
+        // Test complex interface names - should be preserved as-is
+        assert_eq!(generate_interface_name("xe-0/0/1", "25G"), "xe-0/0/1");
+        assert_eq!(generate_interface_name("eth0", "10G"), "eth0");
+        assert_eq!(generate_interface_name("Port-channel1", "1G"), "Port-channel1");
+        assert_eq!(generate_interface_name("ae0", "25G"), "ae0");
+        assert_eq!(generate_interface_name("ge-0/0/2", "25G"), "ge-0/0/2");
+        
+        // Test mixed cases
+        assert_eq!(generate_interface_name("2a", "25G"), "2a");          // Not pure numeric
+        assert_eq!(generate_interface_name("a2", "25G"), "a2");          // Not pure numeric
+    }
+
+    #[test]
+    fn test_interface_transformation_integration() {
+        // Test complete integration: Port + Speed → Interface transformation
+        let mut row_data = HashMap::new();
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Host Name".to_string(), "server01".to_string());
+        row_data.insert("Slot/Port".to_string(), "eth0".to_string());
+        row_data.insert("External".to_string(), "false".to_string());
+        
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+
+        // Test case 1: Port "2" + Speed "25G" → "et-0/0/2" (>10G)
+        row_data.insert("Port".to_string(), "2".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25GB".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_ifname, Some("et-0/0/2".to_string()));
+        assert_eq!(row.link_speed, Some("25G".to_string()));
+        
+        // Test case 2: Port "5" + Speed "10G" → "xe-0/0/5" (=10G)  
+        row_data.insert("Port".to_string(), "5".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "10".to_string());  // Will normalize to "10G"
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_ifname, Some("xe-0/0/5".to_string()));
+        assert_eq!(row.link_speed, Some("10G".to_string()));
+        
+        // Test case 3: Port "1" + Speed "1G" → "ge-0/0/1" (<10G)
+        row_data.insert("Port".to_string(), "1".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "1".to_string());   // Will normalize to "1G"
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_ifname, Some("ge-0/0/1".to_string()));
+        assert_eq!(row.link_speed, Some("1G".to_string()));
+        
+        // Test case 4: Complex interface name should be preserved
+        row_data.insert("Port".to_string(), "xe-0/0/3".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25GB".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_ifname, Some("xe-0/0/3".to_string()));  // Preserved as-is
+        assert_eq!(row.link_speed, Some("25G".to_string()));
+        
+        // Test case 5: Missing speed should default to 1G (ge-)
+        row_data.insert("Port".to_string(), "7".to_string());
+        row_data.remove("Speed\n(GB)");
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some());
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_ifname, Some("ge-0/0/7".to_string()));  // Default 1G = ge-
+    }
+
+    #[test]
+    fn test_required_fields_filtering() {
+        // Test that rows without both switch_label and switch_ifname are filtered out
+        let mut row_data = HashMap::new();
+        let conversion_map = create_test_conversion_map();
+        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
+
+        // Case 1: Row with both switch_label and switch_ifname - should be kept
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Port".to_string(), "2".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_some(), "Row with both switch and port should be included");
+        let row = network_row.unwrap();
+        assert_eq!(row.switch_label, Some("switch01".to_string()));
+        assert_eq!(row.switch_ifname, Some("et-0/0/2".to_string()));
+
+        // Case 2: Row missing switch_label - should be filtered out
+        row_data.clear();
+        row_data.insert("Port".to_string(), "2".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_none(), "Row missing switch name should be filtered out");
+
+        // Case 3: Row missing switch_ifname - should be filtered out
+        row_data.clear();
+        row_data.insert("Switch Name".to_string(), "switch01".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_none(), "Row missing port should be filtered out");
+
+        // Case 4: Row missing both - should be filtered out
+        row_data.clear();
+        row_data.insert("Host Name".to_string(), "server01".to_string());
+        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
+        
+        let network_row = convert_to_network_config_row(&row_data, &field_map);
+        assert!(network_row.is_none(), "Row missing both switch and port should be filtered out");
     }
 }

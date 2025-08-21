@@ -689,6 +689,79 @@ for (field_name, target_field) in conversion_map.iter() {
 - ❌ **NEVER** change exact match priority without regression validation
 - ❌ **NEVER** allow partial matches to override exact matches
 
+### Required Fields Validation
+**CRITICAL**: Provisioning table must only show rows with both switch name and interface defined.
+
+**Problem**: Excel files often contain rows with incomplete data (missing switch name OR interface). These incomplete rows cannot be provisioned and should be filtered out.
+
+**Solution** (`src-tauri/src/commands/data_parser.rs:642`):
+```rust
+// BOTH fields required - use OR to filter out incomplete rows
+if switch_label.is_none() || raw_switch_ifname.is_none() {
+    log::debug!("Skipping row due to missing required switch fields");
+    return None; // Skip rows without essential network info  
+}
+```
+
+**Additional Validation** (`validate_data` function):
+```rust
+// Secondary filter to ensure only complete rows reach the UI
+let filtered_data: Vec<NetworkConfigRow> = data.into_iter()
+    .filter(|row| row.switch_label.is_some() && row.switch_ifname.is_some())
+    .collect();
+```
+
+**REGRESSION PREVENTION**:
+- ❌ **NEVER** change `||` to `&&` in the required fields check
+- ❌ **NEVER** allow incomplete rows to reach the provisioning table
+- ✅ **ALWAYS** validate both switch name and interface are present
+- ✅ Log filtered rows for debugging incomplete Excel data
+
+### Switch Interface Naming Convention
+**CRITICAL**: Automatic interface name generation based on speed and port number for network provisioning.
+
+**Speed-Based Interface Prefixes**:
+```
+> 10G  → "et-" (Ethernet, 25G, 40G, 100G, etc.)
+= 10G  → "xe-" (10 Gigabit Ethernet) 
+< 10G  → "ge-" (Gigabit Ethernet, 1G, etc.)
+```
+
+**Interface Format**: `{prefix}-0/0/{port_number}`
+
+**Examples**:
+- Port "2" + Speed "25G" → `"et-0/0/2"`
+- Port "5" + Speed "10G" → `"xe-0/0/5"`  
+- Port "1" + Speed "1G" → `"ge-0/0/1"`
+
+**Speed Parsing Logic**:
+```rust
+fn get_speed_value(normalized_speed: &str) -> f32 {
+    // Parse "25G" -> 25.0, "10G" -> 10.0, "1G" -> 1.0
+    // Handle edge cases: "100M" -> 0.1, empty -> default 1G
+}
+
+fn generate_interface_name(port: &str, speed: &str) -> String {
+    let speed_val = get_speed_value(speed);
+    let prefix = if speed_val > 10.0 { "et" } 
+                else if speed_val == 10.0 { "xe" } 
+                else { "ge" };
+    format!("{}-0/0/{}", prefix, port)
+}
+```
+
+**BUSINESS RULES**:
+- ✅ Applied ONLY when `switch_ifname` contains simple port numbers ("2", "5", "1")
+- ✅ Skip transformation for complex interfaces ("xe-0/0/1", "eth0", "Port-channel1")  
+- ✅ Preserve existing complex interface names as-is
+- ✅ Default to "ge" (1G) when speed is missing or unparseable
+
+**REGRESSION PREVENTION**:
+- ❌ **NEVER** apply transformation to non-numeric port values
+- ❌ **NEVER** override existing complex interface names 
+- ❌ **NEVER** change speed thresholds without validating network requirements
+- ✅ **ALWAYS** test with various speed formats (G, M, numeric, empty)
+
 ### Error Handling Patterns
 - **Graceful Degradation**: Individual row failures shouldn't stop overall processing
 - **Comprehensive Logging**: Detailed error logs with context for debugging

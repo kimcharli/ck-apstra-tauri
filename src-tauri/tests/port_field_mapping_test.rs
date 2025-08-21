@@ -44,20 +44,21 @@ async fn test_port_field_mapping_regression() {
                 "❌ REGRESSION: Found {} rows with 'Access' in switch_ifname, but switch_ifname should contain port numbers like '2', not 'Access'", 
                 access_rows.len());
             
-            // Check that we have rows with port number "2" (correct mapping)
-            let port_2_rows: Vec<_> = data_rows.iter()
+            // Check that we have rows with transformed port numbers (correct mapping + transformation)
+            // Port "2" with 25G speed should become "et-0/0/2" (>10G = et-)
+            let transformed_port_rows: Vec<_> = data_rows.iter()
                 .filter(|row| {
                     let empty_string = "".to_string();
                     let switch_ifname = row.switch_ifname.as_ref().unwrap_or(&empty_string);
-                    switch_ifname == "2"
+                    switch_ifname.ends_with("-0/0/2")  // Could be et-0/0/2, xe-0/0/2, or ge-0/0/2
                 })
                 .collect();
                 
-            assert!(port_2_rows.len() > 0, 
-                "✅ Should find rows with switch_ifname='2' from the Port column");
+            assert!(transformed_port_rows.len() > 0, 
+                "✅ Should find rows with transformed interface names like 'et-0/0/2' from the Port column");
             
-            println!("✅ Port field mapping test passed: {} rows with correct port numbers, 0 rows with incorrect 'Access' values", 
-                port_2_rows.len());
+            println!("✅ Port field mapping test passed: {} rows with correct transformed interfaces, 0 rows with incorrect 'Access' values", 
+                transformed_port_rows.len());
         }
         Err(e) => {
             panic!("Failed to parse Excel file: {}", e);
