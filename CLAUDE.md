@@ -709,7 +709,55 @@ if switch_label.is_none() || raw_switch_ifname.is_none() {
 let filtered_data: Vec<NetworkConfigRow> = data.into_iter()
     .filter(|row| row.switch_label.is_some() && row.switch_ifname.is_some())
     .collect();
+
+// Duplicate detection based on switch + interface combination
+let mut seen_combinations = std::collections::HashSet::new();
+for row in filtered_data {
+    let key = (row.switch_label.clone(), row.switch_ifname.clone());
+    if seen_combinations.insert(key.clone()) {
+        deduplicated_data.push(row);
+    }
+}
 ```
+
+### Merged Cell Detection - CRITICAL ISSUE RESOLVED
+**PROBLEM**: The intelligent merged cell detection was incorrectly propagating values from previous rows to empty cells, creating duplicate entries in the provisioning table.
+
+**USER FEEDBACK**: "The cell for switch name and switch port are not merged one. So it can not be all over the place if it is not accidently considered as merged."
+
+**ROOT CAUSE**: `apply_intelligent_merged_cell_detection()` was designed for spreadsheets with merged cells, but user's Excel data has individual values in each cell. The algorithm was carrying forward previous values to empty cells when it shouldn't.
+
+**UPDATED SOLUTION** (`src-tauri/src/commands/data_parser.rs:133`):
+```rust
+// SELECTIVE merged cell detection - only for confirmed merged columns
+let data_rows_with_merges = apply_selective_merged_cell_detection(
+    &worksheet_rows[header_row_idx + 1..], 
+    &headers
+);
+```
+
+**NEW FUNCTION** (`apply_selective_merged_cell_detection`):
+```rust
+fn apply_selective_merged_cell_detection(
+    data_rows: &[Vec<DataType>],
+    headers: &[String]
+) -> Vec<HashMap<String, String>> {
+    // Only apply merge detection to confirmed merged columns:
+    let merge_enabled_columns = ["CTs", "link_group_ct_names"]; // User confirmed
+    
+    // For merge-enabled columns: apply vertical propagation
+    // For all other columns: use cell values as-is (no propagation)
+}
+```
+
+**USER CONFIRMATION**: "there are merged cells for connectivity template"
+
+**TARGETED APPROACH**: Only "CTs" column gets merge detection, switch names/ports processed individually
+
+**REGRESSION PREVENTION**:
+- ❌ **NEVER** re-enable merged cell detection without user confirmation of Excel structure
+- ❌ **NEVER** apply value propagation logic unless explicitly required for merged cells
+- ✅ **ALWAYS** process Excel rows as individual cell values unless proven otherwise
 
 **REGRESSION PREVENTION**:
 - ❌ **NEVER** change `||` to `&&` in the required fields check

@@ -68,6 +68,14 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
         .ok_or_else(|| format!("Sheet '{}' not found", sheet_name))?
         .map_err(|e| format!("Failed to read sheet '{}': {}", sheet_name, e))?;
     
+    // Check if we can access merged cell information from the workbook
+    // Note: This depends on calamine version and Excel file format support
+    log::debug!("Worksheet dimensions: {:?}", worksheet.get_size());
+    
+    // Try to get merged cell ranges if available
+    // Unfortunately, calamine v0.22.1 doesn't expose merged cell metadata directly
+    // We need to continue using our selective merge detection approach
+    
     log::info!("Sheet dimensions: {}x{}", worksheet.get_size().0, worksheet.get_size().1);
     
     // Parse the worksheet data with intelligent merged cell handling
@@ -125,12 +133,12 @@ fn parse_worksheet_data(
         create_field_mapping(&headers)
     };
     
-    // Process data rows - disable merged cell detection for now to prevent false propagation
-    // IMPORTANT: The intelligent merged cell detection was creating duplicate entries
-    // by propagating values from previous rows to empty cells when they shouldn't be filled.
-    // Since the user confirmed switch names and ports are NOT in merged cells, we process 
-    // rows as-is without applying any merge logic.
-    let data_rows_with_merges = convert_raw_data_without_merges(
+    // Process data rows with selective merge detection for specific columns
+    // IMPORTANT: The user has mixed cell types:
+    // - Switch names and ports: Individual cells (NO merging)  
+    // - Connectivity template: Merged cells (YES merging)
+    // Apply targeted merge detection only to columns that actually use merged cells.
+    let data_rows_with_merges = apply_selective_merged_cell_detection(
         &worksheet_rows[header_row_idx + 1..], 
         &headers
     );
@@ -207,6 +215,71 @@ fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
             }
         }
         // If both current cell is empty AND no previous value, leave it empty
+    }
+    
+    result
+}
+
+/// Apply selective merged cell detection - only to specific columns that actually use merged cells
+/// 
+/// This function handles mixed Excel structures where:
+/// - Some columns have individual values in each row (switch names, ports)
+/// - Some columns have merged cells that should propagate (connectivity templates, server groups)
+/// 
+/// The function identifies which columns should have merge detection applied based on
+/// field names and applies vertical propagation only to those columns.
+fn apply_selective_merged_cell_detection(
+    data_rows: &[Vec<DataType>],
+    headers: &[String]
+) -> Vec<HashMap<String, String>> {
+    let mut result = Vec::new();
+    
+    // Define columns that should have merge detection applied
+    // CRITICAL: Only apply merge detection to columns confirmed by user to have merged cells
+    // User confirmed: Connectivity templates have merged cells
+    let merge_enabled_columns: std::collections::HashSet<&str> = [
+        "CTs",              // Connectivity Templates - USER CONFIRMED: merged cells
+        "link_group_ct_names", // Internal field name for CTs
+        // NOTE: Other columns may be added here if user confirms they have merged cells
+        // Do NOT add switch names, ports, server names unless explicitly confirmed
+    ].iter().cloned().collect();
+    
+    // Initialize carry values only for merge-enabled columns
+    let mut column_carry_values: Vec<Option<String>> = vec![None; headers.len()];
+    
+    for (row_idx, row) in data_rows.iter().enumerate() {
+        let mut row_map = HashMap::new();
+        
+        for (col_idx, cell) in row.iter().enumerate() {
+            if col_idx < headers.len() {
+                let header = &headers[col_idx];
+                let value = cell.to_string().trim().to_string();
+                
+                if merge_enabled_columns.contains(header.as_str()) {
+                    // Apply merge logic for this column
+                    if !value.is_empty() {
+                        // Non-empty cell - use value and update carry
+                        column_carry_values[col_idx] = Some(value.clone());
+                        log::trace!("Updated carry value for column '{}' at row {}: '{}'", header, row_idx, value);
+                        row_map.insert(header.clone(), value);
+                    } else {
+                        // Empty cell - use carried value if available
+                        if let Some(ref carried_value) = column_carry_values[col_idx] {
+                            row_map.insert(header.clone(), carried_value.clone());
+                            log::trace!("Applied carry value to column '{}' at row {}: '{}'", header, row_idx, carried_value);
+                        } else {
+                            // No carry value available - leave empty
+                            row_map.insert(header.clone(), value);
+                        }
+                    }
+                } else {
+                    // No merge logic - use cell value as-is
+                    row_map.insert(header.clone(), value);
+                }
+            }
+        }
+        
+        result.push(row_map);
     }
     
     result
