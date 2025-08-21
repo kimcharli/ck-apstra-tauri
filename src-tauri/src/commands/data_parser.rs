@@ -100,9 +100,10 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
         return Ok(rows);
     }
     
-    // Extract headers
-    let headers: Vec<String> = worksheet_rows[header_row_idx].iter()
-        .map(|cell| cell.to_string().trim().to_string()) // Don't lowercase here, keep original case
+    // Extract headers with merged cell handling
+    let headers: Vec<String> = propagate_merged_cells_in_row(&worksheet_rows[header_row_idx])
+        .iter()
+        .map(|cell| cell.to_string().trim().to_string())
         .collect();
     
     log::info!("Found headers (original case): {:?}", headers);
@@ -127,7 +128,10 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
             continue; // Skip empty rows
         }
         
-        let row_data: HashMap<String, String> = row.iter().enumerate()
+        // Propagate merged cell values for this row
+        let row_with_merged_values = propagate_merged_cells_in_row(row);
+        
+        let row_data: HashMap<String, String> = row_with_merged_values.iter().enumerate()
             .map(|(col_idx, cell)| {
                 let header = headers.get(col_idx).cloned().unwrap_or_else(|| format!("col_{}", col_idx));
                 let value = cell.to_string().trim().to_string();
@@ -144,6 +148,38 @@ fn parse_worksheet_data(worksheet: &Range<DataType>, conversion_map: Option<&Con
     }
     
     Ok(rows)
+}
+
+/// Propagate merged cell values within a single row
+/// 
+/// In Excel, merged cells only have a value in the first cell of the merged range.
+/// This function copies the value from the first non-empty cell to all subsequent 
+/// empty cells until the next non-empty cell is encountered.
+/// 
+/// This handles the common Excel pattern where merged cells appear as:
+/// ["Value1", "", "", "Value2", "", "Value3"]
+/// and transforms it to:
+/// ["Value1", "Value1", "Value1", "Value2", "Value2", "Value3"]
+/// 
+/// Leading empty cells (before any value) are left as-is.
+fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
+    let mut result = row.to_vec();
+    let mut last_non_empty_value: Option<DataType> = None;
+    
+    for i in 0..result.len() {
+        if !result[i].is_empty() {
+            // Found a non-empty cell, use it as the reference value
+            last_non_empty_value = Some(result[i].clone());
+        } else if let Some(ref value) = last_non_empty_value {
+            // Current cell is empty, but we have a previous non-empty value
+            // This could be part of a merged cell range, so propagate the value
+            result[i] = value.clone();
+            log::trace!("Propagated merged cell value '{}' to position {}", value, i);
+        }
+        // If both current cell is empty AND no previous value, leave it empty
+    }
+    
+    result
 }
 
 fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
@@ -372,7 +408,6 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use crate::models::conversion_map::ConversionMap;
-    use calamine::{Range, DataType};
 
     fn create_test_conversion_map() -> ConversionMap {
         let mut mappings = HashMap::new();
@@ -593,5 +628,55 @@ mod tests {
         println!("'Host Name' normalizes to: '{}'", normalized2);
         
         assert_eq!(normalized1, normalized2, "Headers should normalize to the same value");
+    }
+
+    #[test]
+    fn test_propagate_merged_cells_in_row() {
+        use calamine::DataType;
+        
+        // Create a test row with merged cells pattern
+        // "Server1", "", "", "Port1", "", "Speed1"
+        // This simulates merged cells where Server1 spans 3 columns and Port1 spans 2 columns
+        let test_row = vec![
+            DataType::String("Server1".to_string()),  // First cell of merged range
+            DataType::Empty,                           // Empty cell (part of merge)
+            DataType::Empty,                           // Empty cell (part of merge)
+            DataType::String("Port1".to_string()),     // Next non-empty cell
+            DataType::Empty,                           // Empty cell (part of merge)
+            DataType::String("Speed1".to_string()),    // Standalone cell
+        ];
+        
+        let result = propagate_merged_cells_in_row(&test_row);
+        
+        // Verify that merged cell values are propagated
+        assert_eq!(result[0].to_string(), "Server1");
+        assert_eq!(result[1].to_string(), "Server1"); // Should be propagated
+        assert_eq!(result[2].to_string(), "Server1"); // Should be propagated
+        assert_eq!(result[3].to_string(), "Port1");
+        assert_eq!(result[4].to_string(), "Port1");   // Should be propagated
+        assert_eq!(result[5].to_string(), "Speed1");
+    }
+
+    #[test]
+    fn test_propagate_merged_cells_with_leading_empty() {
+        use calamine::DataType;
+        
+        // Test row that starts with empty cells
+        let test_row = vec![
+            DataType::Empty,                          // Leading empty cell
+            DataType::Empty,                          // Leading empty cell
+            DataType::String("Value1".to_string()),   // First non-empty
+            DataType::Empty,                          // Should be propagated
+            DataType::String("Value2".to_string()),   // New value
+        ];
+        
+        let result = propagate_merged_cells_in_row(&test_row);
+        
+        // Leading empty cells should remain empty
+        assert!(result[0].is_empty());
+        assert!(result[1].is_empty());
+        assert_eq!(result[2].to_string(), "Value1");
+        assert_eq!(result[3].to_string(), "Value1"); // Should be propagated
+        assert_eq!(result[4].to_string(), "Value2");
     }
 }
