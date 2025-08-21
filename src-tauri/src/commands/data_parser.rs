@@ -125,8 +125,12 @@ fn parse_worksheet_data(
         create_field_mapping(&headers)
     };
     
-    // Process data rows with intelligent merged cell detection  
-    let data_rows_with_merges = apply_intelligent_merged_cell_detection(
+    // Process data rows - disable merged cell detection for now to prevent false propagation
+    // IMPORTANT: The intelligent merged cell detection was creating duplicate entries
+    // by propagating values from previous rows to empty cells when they shouldn't be filled.
+    // Since the user confirmed switch names and ports are NOT in merged cells, we process 
+    // rows as-is without applying any merge logic.
+    let data_rows_with_merges = convert_raw_data_without_merges(
         &worksheet_rows[header_row_idx + 1..], 
         &headers
     );
@@ -203,6 +207,36 @@ fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
             }
         }
         // If both current cell is empty AND no previous value, leave it empty
+    }
+    
+    result
+}
+
+/// Convert raw data rows to HashMap without applying any merge logic
+/// 
+/// This function processes Excel rows as-is without attempting to detect or apply
+/// merged cell logic. Each cell is converted directly to its string representation
+/// without any propagation from previous rows or adjacent cells.
+/// 
+/// Use this when your Excel data does not contain merged cells and you want to
+/// preserve the exact structure as entered in the spreadsheet.
+fn convert_raw_data_without_merges(
+    data_rows: &[Vec<DataType>],
+    headers: &[String]
+) -> Vec<HashMap<String, String>> {
+    let mut result = Vec::new();
+    
+    for row in data_rows.iter() {
+        let mut row_map = HashMap::new();
+        
+        for (col_idx, cell) in row.iter().enumerate() {
+            if col_idx < headers.len() {
+                let value = cell.to_string().trim().to_string();
+                row_map.insert(headers[col_idx].clone(), value);
+            }
+        }
+        
+        result.push(row_map);
     }
     
     result
@@ -678,7 +712,27 @@ pub async fn validate_data(data: Vec<NetworkConfigRow>) -> Result<Vec<NetworkCon
         .collect();
     
     log::info!("Filtered to {} rows with both switch name and interface defined", filtered_data.len());
-    Ok(filtered_data)
+    
+    // Remove duplicates based on switch_label + switch_ifname combination
+    let mut seen_combinations = std::collections::HashSet::new();
+    let mut deduplicated_data = Vec::new();
+    let original_count = filtered_data.len();
+    
+    for row in filtered_data {
+        let key = (row.switch_label.clone(), row.switch_ifname.clone());
+        if seen_combinations.insert(key.clone()) {
+            log::debug!("Keeping unique combination: {:?} + {:?}", key.0, key.1);
+            deduplicated_data.push(row);
+        } else {
+            log::debug!("Skipping duplicate combination: {:?} + {:?}", key.0, key.1);
+        }
+    }
+    
+    log::info!("After deduplication: {} unique rows (removed {} duplicates)", 
+        deduplicated_data.len(), 
+        original_count - deduplicated_data.len());
+    
+    Ok(deduplicated_data)
 }
 
 #[cfg(test)]
@@ -1502,5 +1556,55 @@ mod tests {
         
         let network_row = convert_to_network_config_row(&row_data, &field_map);
         assert!(network_row.is_none(), "Row missing both switch and port should be filtered out");
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_detection() {
+        // Test that validate_data removes duplicates based on switch_label + switch_ifname
+        let mut data = Vec::new();
+        
+        // Create duplicate entries with same switch + interface
+        let row1 = NetworkConfigRow {
+            switch_label: Some("CRL01P24L10".to_string()),
+            switch_ifname: Some("et-0/0/2".to_string()),
+            server_label: Some("r2lb103960".to_string()),
+            server_ifname: Some("OCP Slot 2 Port 2".to_string()),
+            link_speed: Some("25G".to_string()),
+            ..Default::default()
+        };
+        
+        let row2 = NetworkConfigRow {
+            switch_label: Some("CRL01P24L10".to_string()),
+            switch_ifname: Some("et-0/0/2".to_string()),
+            server_label: Some("r2lb103959".to_string()),  // Different server
+            server_ifname: Some("OCP Slot 2 Port 2".to_string()),
+            link_speed: Some("25G".to_string()),
+            ..Default::default()
+        };
+        
+        let row3 = NetworkConfigRow {
+            switch_label: Some("CRL01P24L09".to_string()),
+            switch_ifname: Some("et-0/0/2".to_string()),  // Different switch, same interface
+            server_label: Some("r2lb103960".to_string()),
+            server_ifname: Some("OCP Slot 1 Port 2".to_string()),
+            link_speed: Some("25G".to_string()),
+            ..Default::default()
+        };
+        
+        data.push(row1);
+        data.push(row2);  // Duplicate of row1 (same switch + interface)
+        data.push(row3);  // Different switch, should be kept
+        
+        let result = validate_data(data).await.unwrap();
+        
+        assert_eq!(result.len(), 2, "Should have 2 unique combinations after deduplication");
+        
+        // Verify the correct combinations remain
+        let combinations: std::collections::HashSet<_> = result.iter()
+            .map(|row| (row.switch_label.as_ref().unwrap().as_str(), row.switch_ifname.as_ref().unwrap().as_str()))
+            .collect();
+            
+        assert!(combinations.contains(&("CRL01P24L10", "et-0/0/2")));
+        assert!(combinations.contains(&("CRL01P24L09", "et-0/0/2")));
     }
 }
