@@ -38,7 +38,7 @@ mod excel_integration_tests {
         mappings.insert("Comments".to_string(), "comment".to_string());
         mappings.insert("Notes".to_string(), "comment".to_string());
         
-        ConversionMap::new(Some(2), mappings) // Header row 2 as per default config
+        ConversionMap::new(Some(2), mappings) // Header row 2 (1-based, becomes index 1)
     }
 
     #[tokio::test]
@@ -111,6 +111,146 @@ mod excel_integration_tests {
                     // Don't fail the test if sheet doesn't exist, just log it
                     if !e.contains("not found") {
                         panic!("Unexpected error parsing sheet '{}': {}", sheet_name, e);
+                    }
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_debug_excel_headers() {
+        let fixture_path = get_test_fixture_path();
+        
+        if !fixture_path.exists() {
+            eprintln!("Skipping header debug test - fixture not found: {:?}", fixture_path);
+            return;
+        }
+
+        use calamine::{Xlsx, Reader, open_workbook};
+        
+        let file_path = fixture_path.to_string_lossy().to_string();
+        let mut workbook: Xlsx<_> = open_workbook(&file_path).unwrap();
+        let sheet_name = "4187-11";
+        
+        if let Some(Ok(range)) = workbook.worksheet_range(sheet_name) {
+            // Print headers from different rows to see structure
+            for row_idx in 0..5 {
+                if let Some(row) = range.rows().nth(row_idx) {
+                    println!("Row {}: {:?}", row_idx, row.iter().take(15).collect::<Vec<_>>());
+                }
+            }
+            
+            // Test parsing with conversion map to see what header row it actually uses
+            let conversion_map = create_default_conversion_map_for_test();
+            println!("Conversion map header_row config: {:?}", conversion_map.header_row);
+            
+            // Calculate the 0-based index that the parser will use
+            let header_row_idx = (conversion_map.header_row.unwrap_or(1).saturating_sub(1)) as usize;
+            println!("Parser will use header_row_idx: {}", header_row_idx);
+            
+            // Show what headers the parser will actually read
+            if let Some(parser_header_row) = range.rows().nth(header_row_idx) {
+                let parser_headers: Vec<String> = parser_header_row.iter()
+                    .map(|cell| cell.to_string().trim().to_string())
+                    .collect();
+                
+                println!("PARSER WILL READ THESE HEADERS:");
+                for (i, header) in parser_headers.iter().enumerate() {
+                    if !header.is_empty() {
+                        println!("  Column {}: '{}'", i, header);
+                        if header.to_lowercase().contains("slot") || header.to_lowercase().contains("port") {
+                            println!("    ^^^ POTENTIAL SERVER INTERFACE HEADER");
+                        }
+                    }
+                }
+            }
+            
+            // Look at data rows to see where server interface values appear
+            println!("\nDATA ROWS (looking for server interface values):");
+            for row_idx in 2..10 {
+                if let Some(data_row) = range.rows().nth(row_idx) {
+                    let slot_port_value = data_row.get(10).map(|cell| cell.to_string().trim().to_string()).unwrap_or_default();
+                    
+                    if !slot_port_value.is_empty() {
+                        println!("Row {} Slot/Port (Col 10): '{}'", row_idx, slot_port_value);
+                    } else {
+                        println!("Row {} Slot/Port (Col 10): Empty", row_idx);
+                    }
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_debug_field_mapping() {
+        let fixture_path = get_test_fixture_path();
+        
+        if !fixture_path.exists() {
+            eprintln!("Skipping field mapping debug - fixture not found: {:?}", fixture_path);
+            return;
+        }
+
+        use calamine::{Xlsx, Reader, open_workbook};
+        
+        let file_path = fixture_path.to_string_lossy().to_string();
+        let mut workbook: Xlsx<_> = open_workbook(&file_path).unwrap();
+        let sheet_name = "4187-11";
+        
+        if let Some(Ok(range)) = workbook.worksheet_range(sheet_name) {
+            // Get the headers from row 1 (0-based)
+            if let Some(header_row) = range.rows().nth(1) {
+                let headers: Vec<String> = header_row.iter()
+                    .map(|cell| cell.to_string().trim().to_string())
+                    .collect();
+                
+                // Test the actual field mapping creation process
+                let conversion_map = create_default_conversion_map_for_test();
+                
+                // Import the function we need to test
+                use ck_apstra_tauri::commands::data_parser::create_conversion_field_mapping;
+                
+                println!("INPUT HEADERS:");
+                for (i, header) in headers.iter().enumerate() {
+                    if !header.is_empty() {
+                        println!("  [{}]: '{}'", i, header);
+                        if header.contains("Slot") || header.contains("Port") {
+                            println!("       ^^^ SLOT/PORT RELATED");
+                        }
+                    }
+                }
+                
+                println!("\nCONVERSION MAP MAPPINGS:");
+                for (key, value) in &conversion_map.mappings {
+                    println!("  '{}' -> '{}'", key, value);
+                    if key.contains("Slot") || key.contains("Port") {
+                        println!("       ^^^ SLOT/PORT MAPPING");
+                    }
+                }
+                
+                // Create the field mapping and see what gets matched
+                let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
+                
+                println!("\nRESULTING FIELD MAP:");
+                for (field_name, header) in &field_map {
+                    println!("  field '{}' <- header '{}'", field_name, header);
+                    if field_name == "server_ifname" {
+                        println!("       ^^^ SERVER_IFNAME MAPPING!");
+                    }
+                }
+                
+                // Check if server_ifname is mapped
+                if let Some(mapped_header) = field_map.get("server_ifname") {
+                    println!("\n✅ server_ifname is mapped to header: '{}'", mapped_header);
+                } else {
+                    println!("\n❌ server_ifname is NOT mapped!");
+                    
+                    // Try to find potential matches manually
+                    println!("Looking for potential matches:");
+                    for header in &headers {
+                        let header_lower = header.to_lowercase();
+                        if header_lower.contains("slot") || header_lower.contains("port") {
+                            println!("  Potential match: '{}'", header);
+                        }
                     }
                 }
             }

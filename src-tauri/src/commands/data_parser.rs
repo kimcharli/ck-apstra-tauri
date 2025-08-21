@@ -347,7 +347,7 @@ fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
     field_map
 }
 
-fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &HashMap<String, String>) -> HashMap<String, String> {
+pub fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &HashMap<String, String>) -> HashMap<String, String> {
     let mut field_map = HashMap::new();
     
     // Helper function to normalize headers for comparison
@@ -360,34 +360,48 @@ fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &Has
             .join(" ")
     };
     
+    // Sort conversion mappings by specificity (longer keys first) to prioritize exact matches
+    let mut sorted_mappings: Vec<_> = conversion_mappings.iter().collect();
+    sorted_mappings.sort_by_key(|(excel_header, _)| std::cmp::Reverse(excel_header.len()));
+    
     // Use conversion map to map Excel headers to target fields
     for header in headers {
         let normalized_header = normalize_header(header);
         log::debug!("Processing header: '{}' -> normalized: '{}'", header, normalized_header);
         
-        // Try exact match first (after normalization)
+        // Try exact match first (after normalization) - process longer mappings first
         let mut found = false;
-        for (excel_header, target_field) in conversion_mappings {
+        for (excel_header, target_field) in &sorted_mappings {
             let normalized_excel_header = normalize_header(excel_header);
             
             log::trace!("Comparing '{}' vs '{}' (normalized)", normalized_header, normalized_excel_header);
             
             if normalized_header == normalized_excel_header {
-                field_map.insert(target_field.clone(), header.clone());
-                log::info!("✅ EXACT MATCH: '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
+                // Only map if this field hasn't been mapped to a shorter/less specific header
+                if !field_map.contains_key(*target_field) {
+                    field_map.insert(target_field.to_string(), header.clone());
+                    log::info!("✅ EXACT MATCH: '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
+                } else {
+                    log::debug!("Skipping mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
+                }
                 found = true;
                 break;
             }
         }
         
-        // If no exact match found, try partial matching
+        // If no exact match found, try partial matching - longer mappings first
         if !found {
-            for (excel_header, target_field) in conversion_mappings {
+            for (excel_header, target_field) in &sorted_mappings {
                 let normalized_excel_header = normalize_header(excel_header);
                 
                 if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
-                    field_map.insert(target_field.clone(), header.clone());
-                    log::info!("✅ PARTIAL MATCH: '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
+                    // Only map if this field hasn't been mapped to a shorter/less specific header
+                    if !field_map.contains_key(*target_field) {
+                        field_map.insert(target_field.to_string(), header.clone());
+                        log::info!("✅ PARTIAL MATCH: '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
+                    } else {
+                        log::debug!("Skipping partial mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
+                    }
                     found = true;
                     break;
                 }

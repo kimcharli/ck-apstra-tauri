@@ -164,6 +164,107 @@ The application uses a flexible conversion mapping system to translate Excel hea
 - Delete temporary uploaded files after sheet processing (success or failure)
 - Provide user-friendly feedback for missing or malformed data
 
+## Dynamic Conversion Map Architecture
+
+**CRITICAL FEATURE**: The application supports fully dynamic, customer-configurable conversion maps without requiring code changes or recompilation.
+
+### Architecture Overview
+
+**Three-Tier Fallback System**:
+1. **User-provided conversion map** (highest priority) - Runtime JSON configuration
+2. **Default conversion map** from `data/default_conversion_map.json`
+3. **Built-in fallback logic** with common field variations (lowest priority)
+
+### Customer Configuration Workflow
+
+**JSON Configuration Format**:
+```json
+{
+    "header_row": 2,
+    "mappings": {
+        "Switch Name": "switch_label",
+        "Port": "switch_ifname", 
+        "Host Name": "server_label",
+        "Slot/Port": "server_ifname",
+        "Custom Field": "target_field"
+    }
+}
+```
+
+**File Locations**:
+- **Default**: `data/default_conversion_map.json` (embedded in application)
+- **User Custom**: App data directory `/conversion_maps/user_conversion_map.json`
+- **Project Specific**: Any file path via `ConversionService::load_conversion_map_from_file()`
+
+### Technical Implementation
+
+**Runtime Conversion Map Loading** (`src-tauri/src/commands/data_parser.rs`):
+```rust
+pub async fn parse_excel_sheet(
+    file_path: String, 
+    sheet_name: String, 
+    conversion_map: Option<ConversionMap>  // Dynamic conversion map input
+) -> Result<Vec<NetworkConfigRow>, String>
+```
+
+**Intelligent Header Matching** (`create_conversion_field_mapping`):
+- **Specificity Priority**: Longer header matches processed first (`"Slot/Port"` before `"Slot"`)
+- **Normalization**: Case-insensitive, whitespace-normalized, line break handling (`\r\n`)
+- **Exact + Partial Matching**: Supports both precise matches and flexible partial matching
+- **Conflict Prevention**: Already-mapped fields protected from less-specific overwrites
+
+**Built-in Field Variations Support**:
+```rust
+// Automatic support for common header variations
+"server_label" -> ["server", "server_name", "hostname", "host name", "host_name"]
+"server_ifname" -> ["server_interface", "nic", "slot", "slot/port", "slot port"]
+"switch_label" -> ["switch", "switch_name", "device"]
+```
+
+### Customer Benefits
+
+**✅ Zero-Code Configuration**:
+- Pure JSON-based mapping updates
+- Runtime loading and immediate effect
+- No application recompilation or deployment required
+
+**✅ Robust Compatibility**:
+- Handles case differences, whitespace variations, Excel line breaks
+- Backward compatibility with existing conversion maps
+- Graceful fallback for unmapped fields
+
+**✅ Production-Ready Management**:
+- File-based storage and version control friendly
+- App data directory integration for user persistence
+- Comprehensive error handling and logging
+
+### Usage Examples
+
+**Frontend Integration**:
+```typescript
+const customMap = {
+    header_row: 1,
+    mappings: {
+        "Network Device": "switch_label",
+        "Port ID": "switch_ifname",
+        "Connected Host": "server_label"
+    }
+};
+
+const result = await invoke('parse_excel_sheet', {
+    filePath: 'data.xlsx',
+    sheetName: 'Config',
+    conversionMap: customMap  // Applied automatically
+});
+```
+
+**Service Layer** (`src-tauri/src/services/conversion_service.rs`):
+- `load_conversion_map_from_file()` - Load from custom file path
+- `save_conversion_map_to_file()` - Save user modifications
+- `get_user_conversion_map_path()` - Get standard user storage location
+
+**MAINTENANCE RULE**: Never hard-code field mappings in parsing logic. All field mapping must go through the conversion map system to maintain customer configurability.
+
 ### Excel Merged Cell Handling
 
 **CRITICAL IMPLEMENTATION**: The application includes intelligent merged cell detection specifically designed for network configuration data patterns.
