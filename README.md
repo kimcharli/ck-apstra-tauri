@@ -34,41 +34,79 @@ The project follows a well-organized structure with clear separation between fro
 
 ## Getting Started
 
+### Quick Setup
+
+**For the complete development setup guide with troubleshooting, see [docs/development/setup.md](docs/development/setup.md)**
+
 ### Prerequisites
 
-- Node.js (v16 or higher)
-- Rust (latest stable version)
-- Tauri CLI
+**Required Software:**
+- **Node.js**: 18.x or 20.x LTS ([Download](https://nodejs.org/))
+- **Rust**: 1.70+ ([Install via rustup](https://rustup.rs/))  
+- **Tauri CLI**: Latest version
+- **Platform Dependencies**: See [setup guide](docs/development/setup.md#platform-specific-dependencies)
 
-### Installation
+**System Requirements:**
+- 8GB RAM (16GB recommended)
+- 10GB free disk space
+- Network connectivity for dependencies
+
+### One-Minute Setup
 
 ```bash
-# Install Tauri CLI (if not already installed)
-cargo install tauri-cli
+# 1. Clone and enter project
+git clone <repository-url>
+cd ck-apstra-tauri
 
-# Install frontend dependencies
+# 2. Install dependencies
 npm install
+npm install -g @tauri-apps/cli
 
-# Install Rust dependencies
-cd src-tauri && cargo build
+# 3. Start development
+npm run tauri:dev
 ```
 
-### Development
+### Development Commands
 
 ```bash
-# Start development server
+# Development with hot reload
 npm run tauri:dev
 
-# Start with debug logging
+# Development with full debug logging
 RUST_LOG=debug npm run tauri:dev
+
+# Run tests
+npm test                    # Frontend tests
+npm run test:rust          # Backend tests  
+npm run test:integration   # Integration tests
+
+# Code quality
+npm run lint               # TypeScript checking
+npm run lint:rust         # Rust linting
 ```
 
-### Build
+### Production Build
 
 ```bash
-# Build for production
+# Build desktop application
 npm run tauri:build
+
+# Output locations:
+# macOS: src-tauri/target/release/bundle/macos/
+# Windows: src-tauri/target/release/bundle/msi/
+# Linux: src-tauri/target/release/bundle/deb/
 ```
+
+### Common Issues
+
+If you encounter setup problems:
+
+1. **Check the [troubleshooting guide](docs/development/troubleshooting.md)**
+2. **Verify prerequisites**: `node --version`, `cargo --version`, `tauri --version`
+3. **Platform dependencies**: Follow [platform-specific setup](docs/development/setup.md#platform-specific-dependencies)
+4. **Clear cache**: `rm -rf node_modules target/ && npm install`
+
+**Need help?** See [Documentation](#documentation) or create an issue.
 
 ## Features
 
@@ -187,14 +225,26 @@ The application works with Excel files containing network configuration data. De
 
 ## Documentation
 
-- **SPECIFICATION.md**: Complete technical specification with architecture decisions
-- **CLAUDE.md**: Development guidelines and patterns for Claude Code
-- **docs/**: Organized technical documentation including:
-  - **API Integration**: Apstra REST API integration patterns
-  - **Authentication Architecture**: Session management and security
-  - **Core Features**: Detailed feature specifications and workflows
-  - **UI Design Patterns**: Component design and user interface standards
-  - **UX Design Standards**: User experience guidelines and accessibility
+### 📚 Complete Documentation Suite
+
+**Quick Reference:**
+- **[Architecture Overview](docs/architecture/overview.md)** - Visual system architecture and component relationships
+- **[Development Setup Guide](docs/development/setup.md)** - Complete environment setup with troubleshooting
+- **[Troubleshooting Guide](docs/development/troubleshooting.md)** - Common issues and debugging techniques
+
+**Technical Documentation:**
+- **[SPECIFICATION.md](SPECIFICATION.md)** - Complete technical specification with architecture decisions
+- **[CLAUDE.md](CLAUDE.md)** - Development guidelines and patterns for Claude Code
+- **[Data Flow Documentation](docs/architecture/data-flow.md)** - Detailed processing sequences and state management
+
+**Organized by Topic:**
+- **[docs/index.md](docs/index.md)** - Documentation navigation hub
+- **[API Integration](docs/api-integration.md)** - Apstra REST API integration patterns and session management
+- **[Authentication Architecture](docs/authentication-architecture.md)** - Session management and security implementation
+- **[Core Features](docs/core-features.md)** - Detailed feature specifications and workflows
+- **[UI Design Patterns](docs/ui-design-patterns.md)** - Component design and user interface standards
+- **[UX Design Standards](docs/ux-design-standards.md)** - User experience guidelines and accessibility
+- **[Testing Guide](tests/README.md)** - Test structure and coverage documentation
 
 ## Contributing
 
