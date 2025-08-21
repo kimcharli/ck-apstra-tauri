@@ -109,6 +109,10 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       case 'is_external':
         return value === true ? 'Yes' : value === false ? 'No' : '';
       case 'link_speed':
+        // Don't add Gbps if the value already has a unit (G, M, etc.)
+        if (value && typeof value === 'string' && /[GM]$/.test(value)) {
+          return value;
+        }
         return value ? `${value} Gbps` : '';
       default:
         return value.toString();

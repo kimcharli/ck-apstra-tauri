@@ -621,6 +621,74 @@ function FileUpload() {
 
 **Rule**: Never mix field naming conventions within a single service or data flow.
 
+### Speed Normalization System
+**CRITICAL**: Prevents "25G Gbps" display issues through two-part normalization:
+
+**Backend Data Normalization** (`src-tauri/src/commands/data_parser.rs:571-600`):
+```rust
+fn normalize_link_speed(speed: &str) -> String {
+    // Converts Excel formats to clean units:
+    // "25GB" -> "25G"
+    // "100MB" -> "100M" 
+    // "25 Gbps" -> "25G"
+    // "10" -> "10G" (raw numbers assume GB)
+}
+```
+
+**Frontend Display Logic** (`src/components/ProvisioningTable/ProvisioningTable.tsx:111-116`):
+```typescript
+case 'link_speed':
+  // Don't add Gbps if the value already has a unit (G, M, etc.)
+  if (value && typeof value === 'string' && /[GM]$/.test(value)) {
+    return value;  // Return "25G" as-is
+  }
+  return value ? `${value} Gbps` : '';  // Legacy: "10" -> "10 Gbps"
+```
+
+**Applied During Conversion**:
+```rust
+link_speed: get_field("link_speed").map(|speed| normalize_link_speed(&speed)),
+```
+
+**REGRESSION PREVENTION**: 
+- ✅ Backend normalizes data during Excel processing
+- ✅ Frontend detects normalized units to prevent double-suffix 
+- ✅ Comprehensive unit tests for all speed format variations
+- ❌ **NEVER** remove speed normalization without updating frontend logic
+- ❌ **NEVER** change frontend regex `/[GM]$/` without testing all speed formats
+
+### Two-Phase Field Mapping Algorithm
+**CRITICAL**: Prevents port field mapping regressions where "Port" column incorrectly maps to "Trunk/Access Port" content.
+
+**Problem**: Partial matching processed longer headers first, causing "Trunk/Access\nPort" (containing "Access") to map to `switch_ifname` instead of "Port" column (containing "2").
+
+**Solution** (`src-tauri/src/commands/data_parser.rs:create_conversion_field_mapping`):
+```rust
+// Phase 1: Process ALL exact matches first (absolute priority)
+for (field_name, target_field) in conversion_map.iter() {
+    if let Some(header) = headers.iter().find(|h| normalize_header(h) == normalize_header(field_name)) {
+        field_mappings.insert(target_field.clone(), header.clone());
+    }
+}
+
+// Phase 2: Process partial matches only for unmapped headers
+for (field_name, target_field) in conversion_map.iter() {
+    if !field_mappings.contains_key(target_field) {
+        // Only search unmapped headers for partial matches
+    }
+}
+```
+
+**Regression Test** (`src-tauri/tests/port_field_mapping_test.rs`):
+- ✅ Verifies "Port" column maps to `switch_ifname` correctly
+- ✅ Ensures NO rows contain "Access" in `switch_ifname` 
+- ✅ Validates port numbers like "2" appear in the data
+
+**REGRESSION PREVENTION**:
+- ❌ **NEVER** remove two-phase algorithm without comprehensive testing
+- ❌ **NEVER** change exact match priority without regression validation
+- ❌ **NEVER** allow partial matches to override exact matches
+
 ### Error Handling Patterns
 - **Graceful Degradation**: Individual row failures shouldn't stop overall processing
 - **Comprehensive Logging**: Detailed error logs with context for debugging

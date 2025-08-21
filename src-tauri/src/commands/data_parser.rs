@@ -472,6 +472,55 @@ pub fn create_conversion_field_mapping(headers: &[String], conversion_mappings: 
     field_map
 }
 
+/// Normalize link speed values to standard format
+/// 
+/// Converts various speed formats to the standard "XG" format:
+/// - "25GB" -> "25G"
+/// - "25 GB" -> "25G"
+/// - "25Gbps" -> "25G"  
+/// - "25 Gbps" -> "25G"
+/// - "10GB" -> "10G"
+/// - "1GB" -> "1G"
+/// - "100MB" -> "100M"
+/// 
+/// This prevents issues like "25GB Gbps" appearing in the UI.
+fn normalize_link_speed(speed: &str) -> String {
+    let speed = speed.trim().to_lowercase();
+    
+    // Check what unit the original speed had
+    let is_mbps = speed.contains("mbps") || speed.contains("mb");
+    let is_gbps = speed.contains("gbps") || speed.contains("gb");
+    
+    // Remove common suffixes and normalize to standard format
+    let speed = speed
+        .replace("gbps", "")
+        .replace("mbps", "")
+        .replace("gb", "")
+        .replace("mb", "");
+    
+    // Remove all whitespace to get just the numeric part
+    let numeric_part: String = speed.chars().filter(|c| !c.is_whitespace()).collect();
+    
+    // Determine the appropriate unit based on original format
+    if is_mbps {
+        format!("{}M", numeric_part)
+    } else if is_gbps {
+        format!("{}G", numeric_part)
+    } else if numeric_part.chars().all(|c| c.is_ascii_digit()) && !numeric_part.is_empty() {
+        // Pure number, assume GB
+        format!("{}G", numeric_part)
+    } else {
+        // Already normalized (ends with G or M) - just uppercase it
+        let mut chars: Vec<char> = numeric_part.chars().collect();
+        if let Some(last_char) = chars.last_mut() {
+            if *last_char == 'g' || *last_char == 'm' {
+                *last_char = last_char.to_uppercase().next().unwrap_or(*last_char);
+            }
+        }
+        chars.into_iter().collect()
+    }
+}
+
 fn convert_to_network_config_row(
     row_data: &HashMap<String, String>,
     field_map: &HashMap<String, String>
@@ -519,7 +568,7 @@ fn convert_to_network_config_row(
         link_group_lag_mode: get_field("link_group_lag_mode"),
         link_group_ct_names: get_field("link_group_ct_names"),
         link_group_tags: get_field("link_group_tags"),
-        link_speed: get_field("link_speed"),
+        link_speed: get_field("link_speed").map(|speed| normalize_link_speed(&speed)),
         server_ifname: get_field("server_ifname"),
         switch_label,
         switch_ifname,
@@ -647,7 +696,7 @@ mod tests {
         assert_eq!(row.switch_ifname, Some("xe-0/0/1".to_string()));
         assert_eq!(row.server_label, Some("server01".to_string()));
         assert_eq!(row.server_ifname, Some("eth0".to_string()));
-        assert_eq!(row.link_speed, Some("10".to_string()));
+        assert_eq!(row.link_speed, Some("10G".to_string()));
         assert_eq!(row.is_external, Some(false));
         assert_eq!(row.blueprint, None); // Blueprint should always be None
     }
@@ -1120,5 +1169,37 @@ mod tests {
         assert_eq!(result[3].get("Server"), Some(&"ServerY".to_string()));    // Vertical merge
         assert_eq!(result[3].get("Interface"), Some(&"eth3".to_string()));
         assert_eq!(result[3].get("Speed"), Some(&"25G".to_string()));
+    }
+
+    #[test]
+    fn test_normalize_link_speed() {
+        // Test cases for speed normalization
+        assert_eq!(normalize_link_speed("25GB"), "25G");
+        assert_eq!(normalize_link_speed("25 GB"), "25G");
+        assert_eq!(normalize_link_speed("25Gbps"), "25G");
+        assert_eq!(normalize_link_speed("25 Gbps"), "25G");
+        assert_eq!(normalize_link_speed("10GB"), "10G");
+        assert_eq!(normalize_link_speed("1GB"), "1G");
+        assert_eq!(normalize_link_speed("100MB"), "100M");
+        assert_eq!(normalize_link_speed("100 MB"), "100M");
+        assert_eq!(normalize_link_speed("100Mbps"), "100M");
+        assert_eq!(normalize_link_speed("100 Mbps"), "100M");
+        
+        // Test numeric-only inputs (should assume GB)
+        assert_eq!(normalize_link_speed("25"), "25G");
+        assert_eq!(normalize_link_speed(" 10 "), "10G");
+        
+        // Test already normalized values
+        assert_eq!(normalize_link_speed("25G"), "25G");
+        assert_eq!(normalize_link_speed("100M"), "100M");
+        
+        // Test case insensitivity
+        assert_eq!(normalize_link_speed("25gb"), "25G");
+        assert_eq!(normalize_link_speed("25gB"), "25G");
+        assert_eq!(normalize_link_speed("100mb"), "100M");
+        
+        // Test edge cases
+        assert_eq!(normalize_link_speed("  25GB  "), "25G");
+        assert_eq!(normalize_link_speed("25"), "25G");
     }
 }
