@@ -265,6 +265,22 @@ const result = await invoke('parse_excel_sheet', {
 
 **MAINTENANCE RULE**: Never hard-code field mappings in parsing logic. All field mapping must go through the conversion map system to maintain customer configurability.
 
+### Field Mapping Algorithm
+
+**CRITICAL**: The field mapping algorithm uses a two-phase approach to ensure exact matches take absolute priority over partial matches:
+
+**Phase 1 - Exact Match Priority**: Process ALL headers for exact matches first
+- Normalized comparison (case-insensitive, whitespace-normalized, line break handling)
+- Each conversion map entry checked against all headers
+- Once exact match found, field is locked and won't be overwritten
+
+**Phase 2 - Partial Match Fallback**: Only process headers not mapped in Phase 1
+- Contains-based matching for flexibility
+- Longer conversion map entries processed first for specificity
+- Only maps to fields not already claimed in Phase 1
+
+**Regression Prevention**: This prevents issues like "Port" column being incorrectly mapped to "Trunk/Access Port" column due to partial matching. The exact match "Port" → `switch_ifname` will always take priority over partial matches.
+
 ### Excel Merged Cell Handling
 
 **CRITICAL IMPLEMENTATION**: The application includes intelligent merged cell detection specifically designed for network configuration data patterns.

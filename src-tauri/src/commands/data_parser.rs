@@ -364,47 +364,56 @@ pub fn create_conversion_field_mapping(headers: &[String], conversion_mappings: 
     let mut sorted_mappings: Vec<_> = conversion_mappings.iter().collect();
     sorted_mappings.sort_by_key(|(excel_header, _)| std::cmp::Reverse(excel_header.len()));
     
-    // Use conversion map to map Excel headers to target fields
+    // PHASE 1: Process ALL exact matches first (absolute priority)
     for header in headers {
         let normalized_header = normalize_header(header);
-        log::debug!("Processing header: '{}' -> normalized: '{}'", header, normalized_header);
+        log::debug!("Phase 1 - Processing header for exact match: '{}' -> normalized: '{}'", header, normalized_header);
         
-        // Try exact match first (after normalization) - process longer mappings first
+        // Try exact match across all conversion mappings
+        for (excel_header, target_field) in &sorted_mappings {
+            let normalized_excel_header = normalize_header(excel_header);
+            
+            if normalized_header == normalized_excel_header {
+                // Only map if this field hasn't been mapped already
+                if !field_map.contains_key(*target_field) {
+                    field_map.insert(target_field.to_string(), header.clone());
+                    log::info!("✅ EXACT MATCH (Phase 1): '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
+                } else {
+                    log::debug!("Skipping exact mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
+                }
+                break; // Found exact match, no need to check other mappings for this header
+            }
+        }
+    }
+    
+    // PHASE 2: Process partial matches only for unmapped headers
+    for header in headers {
+        let normalized_header = normalize_header(header);
+        
+        // Skip if this header was already mapped in Phase 1
+        let already_mapped = field_map.values().any(|mapped_header| mapped_header == header);
+        if already_mapped {
+            log::debug!("Phase 2 - Skipping header '{}' (already mapped in exact match phase)", header);
+            continue;
+        }
+        
+        log::debug!("Phase 2 - Processing header for partial match: '{}' -> normalized: '{}'", header, normalized_header);
+        
+        // Try partial matching - longer mappings first
         let mut found = false;
         for (excel_header, target_field) in &sorted_mappings {
             let normalized_excel_header = normalize_header(excel_header);
             
-            log::trace!("Comparing '{}' vs '{}' (normalized)", normalized_header, normalized_excel_header);
-            
-            if normalized_header == normalized_excel_header {
-                // Only map if this field hasn't been mapped to a shorter/less specific header
+            if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
+                // Only map if this field hasn't been mapped to any header yet
                 if !field_map.contains_key(*target_field) {
                     field_map.insert(target_field.to_string(), header.clone());
-                    log::info!("✅ EXACT MATCH: '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
+                    log::info!("✅ PARTIAL MATCH (Phase 2): '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
                 } else {
-                    log::debug!("Skipping mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
+                    log::debug!("Skipping partial mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
                 }
                 found = true;
                 break;
-            }
-        }
-        
-        // If no exact match found, try partial matching - longer mappings first
-        if !found {
-            for (excel_header, target_field) in &sorted_mappings {
-                let normalized_excel_header = normalize_header(excel_header);
-                
-                if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
-                    // Only map if this field hasn't been mapped to a shorter/less specific header
-                    if !field_map.contains_key(*target_field) {
-                        field_map.insert(target_field.to_string(), header.clone());
-                        log::info!("✅ PARTIAL MATCH: '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
-                    } else {
-                        log::debug!("Skipping partial mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
-                    }
-                    found = true;
-                    break;
-                }
             }
         }
         
