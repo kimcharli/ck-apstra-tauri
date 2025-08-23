@@ -212,16 +212,9 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       // Extract unique switch labels from table data for query optimization
       const uniqueSwitchLabels = [...new Set(data.map(row => row.switch_label).filter(Boolean))] as string[];
       
-      console.log('🔍 Fetching connectivity data from Apstra...', { 
-        blueprintId, 
-        blueprintName: defaultBlueprintName,
-        switchLabels: uniqueSwitchLabels,
-        switchCount: uniqueSwitchLabels.length 
-      });
 
       // Query Apstra for connectivity data with switch label filtering for optimization
       const connectivityResponse = await apstraApiService.queryConnectivity(blueprintId, uniqueSwitchLabels);
-      console.log('📊 Connectivity query results:', connectivityResponse);
 
       // Compare the API results with table data and add missing rows
       const { comparisonResults, newRowsAdded, updatedData, apiDataMap: responseApiDataMap } = compareAndUpdateConnectivityData(data, connectivityResponse.items);
@@ -268,17 +261,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     // Create a map of API data with interface-level keys and merge multiple chunks
     const apiConnectionsMap = new Map<string, any>();
     
-    console.log('🔍 Processing API results for connection mapping:', {
-      totalResults: apiResults.length
-    });
-    
-    // Log to downloadable service as well
-    import('../../services/LoggingService').then(({ logger }) => {
-      logger.logInfo('API_CALL', 'Processing API results for connection mapping', {
-        totalResults: apiResults.length
-      });
-    });
-    
     apiResults.forEach((item, index) => {
       // Extract switch and server information from API result
       const switchName = item.switch?.label || item.switch?.hostname;
@@ -286,44 +268,9 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const switchInterface = item.switch_intf?.if_name || item.intf1?.if_name;
       const serverInterface = item.server_intf?.if_name || item.intf2?.if_name;
       
-      console.log(`🔍 API result ${index + 1}:`, {
-        switchName,
-        serverName,
-        switchInterface,
-        serverInterface,
-        item: item
-      });
-      
-      // Log critical connection data to downloadable logs
-      import('../../services/LoggingService').then(({ logger }) => {
-        logger.logDebug('API_CALL', `API result ${index + 1} connection data`, {
-          switchName,
-          serverName,
-          switchInterface,
-          serverInterface,
-          hasSwitch: !!item.switch,
-          hasServer: !!item.server,
-          hasSwitchIntf: !!item.switch_intf,
-          hasIntf1: !!item.intf1,
-          rawItem: JSON.stringify(item, null, 2)
-        });
-      });
-      
       if (switchName && serverName && switchInterface) {
         // Use switch_label + server_label + switch_ifname as key for duplicate detection
         const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
-        
-        console.log(`🗝️ Generated connection key: "${connectionKey}"`);
-        
-        // Log connection key generation to downloadable logs
-        import('../../services/LoggingService').then(({ logger }) => {
-          logger.logDebug('API_CALL', `Generated connection key: "${connectionKey}"`, {
-            switchName,
-            serverName,
-            switchInterface,
-            resultIndex: index
-          });
-        });
         
         // Check if this connection already exists in our map
         const existingData = apiConnectionsMap.get(connectionKey);
@@ -383,23 +330,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       }
     });
 
-    console.log('🔍 Checking Excel data against API connections:', {
-      totalExcelRows: tableData.length,
-      totalApiConnections: apiConnectionsMap.size,
-      apiConnectionKeys: Array.from(apiConnectionsMap.keys()).slice(0, 5) // Show first 5 keys
-    });
-
-    // Log Excel vs API comparison summary to downloadable logs
-    const allApiKeys = Array.from(apiConnectionsMap.keys());
-    import('../../services/LoggingService').then(({ logger }) => {
-      logger.logInfo('DATA_CHANGE', 'Excel vs API comparison starting', {
-        totalExcelRows: tableData.length,
-        totalApiConnections: apiConnectionsMap.size,
-        firstFiveApiKeys: allApiKeys.slice(0, 5),
-        allApiKeys: allApiKeys // Full list for analysis
-      });
-    });
-
     // Check each table row against API data
     tableData.forEach((row, rowIndex) => {
       const switchName = row.switch_label;
@@ -418,46 +348,12 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
 
       // Try to find matching connection in API data using interface-level key
       const connectionKey = `${switchName}-${serverName}-${switchInterface || ''}`;
-      
-      console.log(`🔍 Excel row ${rowIndex + 1} looking for key: "${connectionKey}"`);
-      
       const apiData = apiConnectionsMap.get(connectionKey);
       
+      // Log only missing connections for troubleshooting
       if (!apiData) {
-        console.log(`❌ No match found for "${connectionKey}". Available keys:`);
-        const allKeys = Array.from(apiConnectionsMap.keys());
-        console.log(`  Total available keys: ${allKeys.length}`);
-        
-        // Look for keys that might be similar
-        const similarKeys = allKeys.filter(key => 
-          key.includes(switchName) || key.includes(serverName) || 
-          (switchInterface && key.includes(switchInterface))
-        );
-        if (similarKeys.length > 0) {
-          console.log(`  🔍 Similar keys found: ${similarKeys.slice(0, 3)}`);
-        } else {
-          console.log(`  🔍 First 3 available keys: ${allKeys.slice(0, 3)}`);
-        }
-        
-        // Log no-match details to downloadable logs
         import('../../services/LoggingService').then(({ logger }) => {
-          logger.logWarn('DATA_CHANGE', `No API match for Excel row ${rowIndex + 1}`, {
-            connectionKey,
-            switchName,
-            serverName,
-            switchInterface,
-            serverInterface,
-            totalAvailableKeys: allKeys.length,
-            similarKeys: similarKeys.slice(0, 5),
-            firstThreeAvailableKeys: allKeys.slice(0, 3)
-          });
-        });
-      } else {
-        console.log(`✅ Match found for "${connectionKey}"`);
-        
-        // Log successful match to downloadable logs
-        import('../../services/LoggingService').then(({ logger }) => {
-          logger.logInfo('DATA_CHANGE', `Match found for Excel row ${rowIndex + 1}`, {
+          logger.logWarn('DATA_CHANGE', `No API match found for Excel connection`, {
             connectionKey,
             switchName,
             serverName,
@@ -470,11 +366,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         // Found a match - use unified field comparison function
         const fieldMatches = compareFields(row, apiData);
         
-        console.log(`🔍 Field comparison for ${switchName}-${serverName}:`, {
-          tableSpeed: row.link_speed,
-          apiSpeed: apiData.rawData?.link1?.speed || apiData.link1?.speed,
-          fieldMatches
-        });
 
         results.push({
           status: 'match',
@@ -533,7 +424,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
 
     // Store the API data map for field-level comparisons BEFORE we start deleting from apiConnectionsMap
     const finalApiDataMap = new Map<string, any>();
-    console.log('🗺️ Creating API data map from merged connection data BEFORE deletion');
     
     // First, capture ALL the merged data from apiConnectionsMap before any deletions
     [...apiConnectionsMap.entries()].forEach(([connectionKey, connectionData]) => {
@@ -548,8 +438,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         finalApiDataMap.set(connectionKey, result.apiData.rawData || result.apiData);
       }
     });
-    
-    console.log('🗺️ Final API data map has', finalApiDataMap.size, 'entries with merged data (captured before map deletion)');
 
     // Now combine original data with new rows and group by server
     const combinedData = [...tableData, ...newRows];
@@ -665,37 +553,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const apiData = getServerApiData(row);
       const hasApiDataAvailable = apiDataMap.size > 0; // Check if Fetch & Compare was run
       
-      // Debug logging for color coding issues  
-      if (columnKey === 'switch_ifname' && row.comment !== 'Only in Blueprint') {
-        const connectionKey = row.switch_label && row.server_label && row.switch_ifname ? 
-          `${row.switch_label}-${row.server_label}-${row.switch_ifname}` : 'invalid-key';
-        
-        console.log('🔍 Color debug for Excel row:', {
-          switch: row.switch_label,
-          server: row.server_label, 
-          interface: row.switch_ifname,
-          connectionKey: connectionKey,
-          hasApiDataAvailable: hasApiDataAvailable,
-          apiDataMapSize: apiDataMap.size,
-          apiDataExists: !!apiData,
-          comment: row.comment
-        });
-        
-        if (!apiData && hasApiDataAvailable) {
-          console.log('  ❌ No API data found - checking available keys:');
-          const availableKeys = Array.from(apiDataMap.keys());
-          console.log('  Available keys (first 5):', availableKeys.slice(0, 5));
-          console.log(`  Total keys: ${availableKeys.length}`);
-          
-          // Look for similar keys that might match our pattern
-          const similarKeys = availableKeys.filter(key => 
-            key.includes(row.switch_label || '') || 
-            key.includes(row.server_label || '') ||
-            key.includes(row.switch_ifname || '')
-          );
-          console.log('  Keys containing our values:', similarKeys.slice(0, 3));
-        }
-      }
       
       if (hasApiDataAvailable && apiData) {
         // We have API data to compare against - determine match/mismatch
