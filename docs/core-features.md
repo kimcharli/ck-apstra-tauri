@@ -168,6 +168,52 @@ let merge_enabled_columns: std::collections::HashSet<&str> = [
 - **Available**: Complete Excel merged region metadata via calamine 0.30.0 API
 - **Next**: Replace heuristics with universal metadata-based processing
 
+### Provisioning Table Data Management Rules
+
+**CRITICAL**: These rules govern how the provisioning table handles data updates and synchronization with external sources.
+
+**Fetch & Compare Data Synchronization**:
+- **Auto-Add Missing Connections**: If Apstra API returns connections not present in the provisioning table, automatically add them as new rows
+- **Preserve Existing Data**: Never modify or remove existing table entries during API synchronization  
+- **Merge Strategy**: API data supplements table data, does not replace it
+- **New Row Identification**: Mark API-sourced rows with `comment: 'Added from API query'` for traceability
+- **User Notification**: Alert user with count of newly added connections for transparency
+- **API Data Caching**: Store complete API response data in `apiDataMap` for efficient field-level comparisons and button rendering
+
+**Data Integrity Rules**:
+- **Interface-Level Duplicate Prevention**: Skip adding connections that already exist with identical switch_label, server_label, and switch_ifname combination. If a server has additional interfaces connected to other switch interfaces not present in the Excel data, those new interface connections should be added to the provisioning table
+- **Blueprint-Only Connection Identification**: Mark newly added interface connections with visual indicator 'Only in Blueprint' to distinguish from Excel-sourced data
+- **Multi-Interface Server Support**: Allow multiple rows for the same server when connected via different interfaces, ensuring complete connectivity representation
+- **Required Field Validation**: Only add new rows with complete switch_label and server_label
+- **Blueprint Consistency**: New rows inherit the blueprint context from the current query
+- **Interface Mapping**: Preserve API interface names when available, leave empty when not provided
+- **Default Values**: Apply consistent defaults for missing fields (is_external: false, tags: empty)
+
+**Comparison Logic Rules**:
+- **Match Criteria**: Compare connections based on switch_label and server_label combination
+- **Status Classification**: Categorize each connection as 'match', 'missing', or 'extra'
+- **Visual Feedback**: Provide color-coded summary statistics (matches, missing, extra, added)
+- **Detailed Results**: Show interface-level details for matched connections
+
+**Visual Match Indicators**:
+- **Server Name Rendering**: If server exists in fetched API data, render server name as clickable button with URL (same as switch) in green 'Match' color
+  - **Efficient Implementation**: Uses direct `serverApiData.server.id` from stored API results (no additional API calls)
+  - **Seamless Navigation**: Opens Apstra web interface directly to server's node page
+  - **Consistent Experience**: Same behavior as switch name buttons for unified user experience
+- **Field-Level Matching**: Compare individual fields between API data and Excel data:
+  - **Server Interface**: If server_ifname matches API data, render cell in green 'Match' color
+  - **Link Speed**: If link_speed matches API data, render cell in green 'Match' color  
+  - **LAG Mode**: If link_group_lag_mode matches API data, render cell in green 'Match' color
+  - **Connectivity Templates**: If link_group_ct_names matches API data, render cell in green 'Match' color
+  - **External Flag**: If is_external matches API data, render cell in green 'Match' color
+- **Match Color Scheme**: Use consistent green color (#d4edda background, #155724 text) for all matched fields to provide immediate visual feedback
+- **Performance Optimization**: All field matching uses cached API data from Fetch & Compare operation for maximum efficiency
+
+**Table Organization Rules**:
+- **Server Grouping**: All connections for the same server must be grouped together in the table
+- **No Scattering**: Links of the same server should not be scattered throughout the table
+- **Logical Ordering**: Maintain logical grouping to improve readability and management
+
 ### Defensive Data Processing
 **CRITICAL**: Apply defensive programming for robust Excel processing:
 

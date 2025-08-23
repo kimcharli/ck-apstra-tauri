@@ -3,6 +3,7 @@ export interface NetworkConfigRow {
   server_label?: string;
   is_external?: boolean;
   server_tags?: string;
+  switch_tags?: string;
   link_group_ifname?: string;
   link_group_lag_mode?: string;
   link_group_ct_names?: string;

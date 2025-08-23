@@ -25,7 +25,8 @@ export const renderApstraSystemButtonWithLookup = (
   label: string,
   blueprintId: string,
   blueprintName: string,
-  title?: string
+  title?: string,
+  preknownNodeId?: string
 ): React.ReactNode => {
   if (!label || label === '-') {
     return <span className="no-data">{label || '-'}</span>;
@@ -38,16 +39,29 @@ export const renderApstraSystemButtonWithLookup = (
       url="" // Will be generated dynamically on click
       title={title || `Click to open system ${label} in Apstra blueprint ${blueprintName}`}
       onClick={async () => {
-        console.log('🔍 Fetching node ID for system:', label);
+        console.log('🔍 Opening system:', label);
         try {
-          // Use the same API as ToolsPage to get system info
-          const response = await apstraApiService.searchSystemsWithTopology(blueprintId, label);
+          let nodeId = preknownNodeId;
+
+          // If we don't have a preknown node ID, try to find it via API search
+          if (!nodeId) {
+            console.log('🔍 No preknown node ID, searching via API...');
+            try {
+              // Try system topology search first (works for most systems)
+              const response = await apstraApiService.searchSystemsWithTopology(blueprintId, label);
+              if (response.count > 0 && response.items[0]?.system?.id) {
+                nodeId = response.items[0].system.id;
+                console.log('✅ Found node ID via API search:', nodeId);
+              }
+            } catch (error) {
+              console.log('⚠️ API search failed:', error);
+            }
+          } else {
+            console.log('✅ Using preknown node ID:', nodeId);
+          }
           
-          if (response.count > 0 && response.items[0]?.system?.id) {
-            const nodeId = response.items[0].system.id;
-            console.log('✅ Found node ID for', label, ':', nodeId);
-            
-            // Generate and open the URL with real node ID
+          if (nodeId) {
+            // Generate and open the URL with the node ID
             const host = cleanHostForUrl(getApstraHost());
             const systemUrl = generateApstraUrls.system({
               host,
@@ -61,11 +75,27 @@ export const renderApstraSystemButtonWithLookup = (
             await open(systemUrl);
           } else {
             console.warn('❌ Node ID not found for system:', label);
-            alert(`System "${label}" not found in blueprint ${blueprintName}`);
+            
+            // Use Tauri's dialog instead of alert
+            try {
+              const { message } = await import('@tauri-apps/api/dialog');
+              await message(`System "${label}" not found in blueprint ${blueprintName}.\n\nThis could mean:\n• The system exists in a different blueprint\n• The system label format is different\n• The system hasn't been discovered yet`, 'System Not Found');
+            } catch (dialogError) {
+              console.error('❌ Dialog failed, falling back to console:', dialogError);
+              console.error(`System "${label}" not found in blueprint ${blueprintName}`);
+            }
           }
         } catch (error) {
-          console.error('❌ Failed to fetch system node ID:', error);
-          alert(`Failed to find system "${label}": ${error}`);
+          console.error('❌ Failed to open system:', error);
+          
+          // Use Tauri's dialog instead of alert
+          try {
+            const { message } = await import('@tauri-apps/api/dialog');
+            await message(`Failed to open system "${label}": ${error}`, 'Error Opening System');
+          } catch (dialogError) {
+            console.error('❌ Dialog failed, falling back to console:', dialogError);
+            console.error(`Failed to open system "${label}": ${error}`);
+          }
         }
       }}
     />

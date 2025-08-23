@@ -156,6 +156,13 @@ export class ApstraApiService {
   }
 
   /**
+   * Trim and normalize query string - removes leading/trailing whitespace and newlines
+   */
+  private static normalizeQuery(query: string): string {
+    return query.trim().replace(/\n\s*/g, ' ').replace(/\s+/g, ' ');
+  }
+
+  /**
    * Execute a custom query against a blueprint
    */
   public async executeQuery(blueprintId: string, query: string): Promise<QueryResponse> {
@@ -164,10 +171,11 @@ export class ApstraApiService {
     }
 
     try {
+      const normalizedQuery = ApstraApiService.normalizeQuery(query);
       const result = await invoke<ApiResult<QueryResponse>>('apstra_execute_query', {
         sessionId: this.sessionId,
         blueprintId,
-        query,
+        query: normalizedQuery,
       });
       
       if (result.success && result.data) {
@@ -178,6 +186,44 @@ export class ApstraApiService {
     } catch (error) {
       throw error;
     }
+  }
+
+  /**
+   * Query all connectivity in a blueprint to compare with provisioning table
+   */
+  public async queryConnectivity(blueprintId: string): Promise<QueryResponse> {
+    if (!this.isAuthenticated) {
+      throw new Error('Not authenticated. Please login first.');
+    }
+
+    // Complex graph query to get switch-to-server connectivity information
+    const connectivityQuery = `
+      match(
+        node('system', system_type='switch', name='switch')
+         .out('hosted_interfaces').node('interface', if_type='ethernet', name='intf1')
+          .out('link').node('link', name='link1')
+          .in_('link').node(name='intf2')
+          .in_('hosted_interfaces').node('system', system_type='server', name='server'),
+        optional(
+          node(name='switch').out('part_of_redundancy_group').node('redundancy_group', name='rg1')
+            .out('hosted_interfaces').node('interface', name='evpn1')
+            .out('link').node('link', name='evpn-link')
+            .in_('link').node('interface', name='evpn2')
+            .in_('hosted_interfaces').node(name='server'),
+          ),
+        optional(
+          node(name='rg1').out('hosted_interfaces').node(name='evpn1')
+            .out('composed_of').node(name='ae1')
+            .out('composed_of').node(name='intf1')
+          ),
+        optional(
+          node(name='rg1').out('hosted_interfaces').node(name='evpn1')
+            .out().node(name='intf1')
+         )
+      )
+    `;
+
+    return await this.executeQuery(blueprintId, connectivityQuery);
   }
 
   /**
@@ -220,14 +266,7 @@ export class ApstraApiService {
       throw new Error('Not authenticated. Please login first.');
     }
 
-    // Graph query to get system with pod and rack information
-    const query = `match(
-      node('system', label='${serverName}', name='system')
-        .out().node('pod', name='pod'),
-      node(name='system')
-        .out().node('rack', name='rack')
-    )`;
-
+    const query = ApstraApiService.createSystemWithTopologyQuery(serverName);
     return await this.executeQuery(blueprintId, query);
   }
 
@@ -239,13 +278,7 @@ export class ApstraApiService {
       throw new Error('Not authenticated. Please login first.');
     }
 
-    // Graph query to get interface with IP and related system, pod, rack information
-    const query = `match(
-      node('interface', ipv4_addr='${ipAddress}', name='intf').in_().node('system', name='system')
-        .out().node('pod', name='pod'),
-      node(name='system').out().node('rack', name='rack')
-    )`;
-
+    const query = ApstraApiService.createIPWithTopologyQuery(ipAddress);
     return await this.executeQuery(blueprintId, query);
   }
 
@@ -277,30 +310,33 @@ export class ApstraApiService {
    * Helper method to create a system search query
    */
   public static createSystemQuery(serverName: string): string {
-    return `match(node('system', label='${serverName}', name='system'))`;
+    const query = `match(node('system', label='${serverName}', name='system'))`;
+    return ApstraApiService.normalizeQuery(query);
   }
 
   /**
    * Helper method to create a system search query with topology
    */
   public static createSystemWithTopologyQuery(serverName: string): string {
-    return `match(
+    const query = `match(
       node('system', label='${serverName}', name='system')
         .out().node('pod', name='pod'),
       node(name='system')
         .out().node('rack', name='rack')
     )`;
+    return ApstraApiService.normalizeQuery(query);
   }
 
   /**
    * Helper method to create an IP search query with topology
    */
   public static createIPWithTopologyQuery(ipAddress: string): string {
-    return `match(
+    const query = `match(
       node('interface', ipv4_addr='${ipAddress}', name='intf').in_().node('system', name='system')
         .out().node('pod', name='pod'),
       node(name='system').out().node('rack', name='rack')
     )`;
+    return ApstraApiService.normalizeQuery(query);
   }
 }
 
