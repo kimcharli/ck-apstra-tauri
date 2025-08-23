@@ -1,5 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { NetworkConfigRow, ApstraConfig } from '../../types';
+import { renderApstraSystemButtonWithLookup } from '../../utils/apstraLinkHelpers';
+import { getBlueprintIdByLabel } from '../../utils/blueprintMapping';
+import { apstraApiService } from '../../services/ApstraApiService';
 import './ProvisioningTable.css';
 
 interface ProvisioningTableProps {
@@ -132,6 +135,42 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     return baseClass;
   };
 
+  const renderCellContent = (row: NetworkConfigRow, columnKey: string): React.ReactNode => {
+    const value = row[columnKey as keyof NetworkConfigRow];
+    
+    // Handle switch name column as clickable link
+    if (columnKey === 'switch_label' && value) {
+      const switchName = formatCellValue(value, columnKey);
+      
+      // Use same approach as ToolsPage - check if apstraApiService has connection
+      const apstraHost = apstraApiService.getHost();
+      
+      if (apstraHost) {
+        // Use default blueprint (same as ToolsPage uses for its default)
+        // This matches the dropdown selection in ProvisioningPage defaulting to 'DH4-Colo2'
+        const defaultBlueprintName = 'DH4-Colo2';
+        const blueprintId = getBlueprintIdByLabel(defaultBlueprintName);
+        
+        if (blueprintId) {
+          return renderApstraSystemButtonWithLookup(
+            switchName,
+            blueprintId,
+            defaultBlueprintName,
+            `Click to open switch ${switchName} in Apstra blueprint ${defaultBlueprintName}`
+          );
+        } else {
+          console.log('❌ Blueprint ID not found for default blueprint:', defaultBlueprintName);
+        }
+      } else {
+        console.log('❌ No Apstra connection available. ApstraApiService host:', apstraHost);
+        console.log('💡 To enable clickable switch links: Go to "1. Apstra Connection" and configure your Apstra settings');
+      }
+    }
+    
+    // For all other columns, use the standard formatting
+    return formatCellValue(value, columnKey);
+  };
+
   if (isLoading) {
     return (
       <div className="provisioning-table-container">
@@ -233,7 +272,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
                     className={getCellClass(row[column.key as keyof NetworkConfigRow], column.key)}
                     title={formatCellValue(row[column.key as keyof NetworkConfigRow], column.key)}
                   >
-                    {formatCellValue(row[column.key as keyof NetworkConfigRow], column.key)}
+                    {renderCellContent(row, column.key)}
                   </td>
                 ))}
               </tr>
