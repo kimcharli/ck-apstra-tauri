@@ -31,7 +31,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     { key: 'link_group_ifname', header: 'LAG/Bond Name', width: '120px', sortable: true },
     { key: 'link_group_lag_mode', header: 'LAG Mode', width: '100px', sortable: true },
     { key: 'link_group_ct_names', header: 'Connectivity Template', width: '150px', sortable: true },
-    { key: 'blueprint', header: 'Blueprint', width: '120px', sortable: true },
     { key: 'server_tags', header: 'Server Tags', width: '120px', sortable: false },
     { key: 'link_tags', header: 'Link Tags', width: '120px', sortable: false },
     { key: 'comment', header: 'Comments', width: '200px', sortable: false }
