@@ -12,7 +12,7 @@ Comprehensive technical documentation for the Apstra Network Configuration Tool.
 ### **Developers Start Here:**
 - **[Development Guide](./development.md)** - Complete setup, commands, principles, and troubleshooting
 - **[Architecture Overview](./architecture.md)** - System design patterns and deployment
-- **[Data Flow Diagrams](./architecture/data-flow.md)** - Visual processing sequences and flows
+- **[Data Flow Diagrams](./data-flow.md)** - Visual processing sequences and flows
 
 ## Core Technical Documentation
 
@@ -25,7 +25,7 @@ Complete system architecture and design:
 - Security considerations and performance optimization
 - Native application distribution and deployment strategy
 
-#### [Data Flow Documentation](./architecture/data-flow.md)
+#### [Data Flow Documentation](./data-flow.md)
 Visual processing sequences with Mermaid diagrams:
 - Excel processing pipeline with transformation flow
 - API integration flow with authentication sequences
