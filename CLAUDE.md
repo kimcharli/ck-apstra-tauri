@@ -285,6 +285,16 @@ const result = await invoke('parse_excel_sheet', {
 
 **CRITICAL IMPLEMENTATION**: The application includes intelligent merged cell detection specifically designed for network configuration data patterns.
 
+**CALAMINE 0.30.0 UPGRADE**: Now provides full Excel merged region metadata support with methods:
+- `load_merged_regions()`: Loads merged region data from Excel file
+- `merged_regions()`: Returns all merged regions across worksheets
+- `merged_regions_by_sheet(name)`: Returns merged regions for specific sheet
+
+**ARCHITECTURE EVOLUTION**:
+- **Previous (0.22)**: Heuristic-based selective processing due to API limitations
+- **Current (0.30.0)**: Access to 1,100+ actual merged regions in test Excel files
+- **Future**: Universal processing using Excel's metadata (now technically possible)
+
 **Key Design Decisions**:
 - **Vertical-Only Propagation**: Only propagates values vertically (down rows) to avoid false positives from horizontal propagation
 - **Server Name Focus**: Primarily designed to handle server names that span multiple rows in merged cells
@@ -330,6 +340,18 @@ fn apply_intelligent_merged_cell_detection(
 4. **Performance**: Efficient single-pass algorithm without complex merge region analysis
 5. **Compatibility**: Works with calamine 0.22 without requiring newer API versions
 
+**SELECTIVE COLUMN PROCESSING**:
+Due to calamine library limitations (no merged region API), the system uses selective processing:
+
+```rust
+let merge_enabled_columns: std::collections::HashSet<&str> = [
+    "CTs",              // Connectivity Templates - USER CONFIRMED: merged cells
+    "link_group_ct_names", // Internal field name for CTs  
+    "Host Name",        // Server names - EVIDENCE: merged cells detected
+    "server_label",     // Internal field name for Host Name
+].iter().cloned().collect();
+```
+
 **CRITICAL DECISION - NO HORIZONTAL MERGE DETECTION**:
 After extensive testing and debugging, the decision was made to **explicitly avoid horizontal merged cell propagation**. This was a conscious architectural choice because:
 
@@ -339,12 +361,16 @@ After extensive testing and debugging, the decision was made to **explicitly avo
 - **Calamine API Limitations**: The calamine 0.22 version doesn't support `load_merged_regions()` API, so any merge detection must be heuristic
 - **Conservative Approach**: It's better to miss some horizontal merges than to create false data associations that corrupt the network configuration data
 
-**If horizontal merge support is needed in the future**:
-1. First upgrade calamine to a version that supports `load_merged_regions()` API
-2. Use official Excel merged region data rather than heuristic detection
-3. Implement strict validation to prevent false horizontal propagation
-4. Add comprehensive test cases for horizontal merge patterns
-5. Consider making horizontal merge detection optional/configurable
+**IMPLEMENTATION ROADMAP**:
+1. ✅ **Library Upgrade Complete**: Upgraded to calamine 0.30.0 with merged region API support
+2. 🚧 **Metadata Integration**: Currently reading Excel merge data (1,100+ regions detected in test files)
+3. 🔄 **Universal Processing**: Replace selective heuristic approach with metadata-based universal processing
+4. 🔄 **Performance Optimization**: Process only regions that affect visible data rows
+
+**CURRENT STATUS**: 
+- **Working**: Selective heuristic processing (server names and CTs)
+- **Available**: Complete Excel merged region metadata via calamine 0.30.0 API
+- **Next**: Replace heuristics with universal metadata-based processing
 
 **Integration Points**:
 - Called from `parse_worksheet_data()` in the main Excel parsing pipeline

@@ -2,7 +2,7 @@ use tauri::command;
 use crate::models::network_config::NetworkConfigRow;
 use crate::models::conversion_map::ConversionMap;
 use crate::commands::send_backend_log;
-use calamine::{Reader, Xlsx, open_workbook, Range, DataType};
+use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 use std::collections::HashMap;
 
 // Helper function to log to both Rust logging and frontend LoggingService
@@ -65,16 +65,23 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
     
     // Get the specific worksheet
     let worksheet = workbook.worksheet_range(&sheet_name)
-        .ok_or_else(|| format!("Sheet '{}' not found", sheet_name))?
         .map_err(|e| format!("Failed to read sheet '{}': {}", sheet_name, e))?;
     
-    // Check if we can access merged cell information from the workbook
-    // Note: This depends on calamine version and Excel file format support
+    // NEW: Access Excel's actual merged region metadata with calamine 0.30.0
+    // This replaces our heuristic guessing with accurate Excel data
     log::debug!("Worksheet dimensions: {:?}", worksheet.get_size());
     
-    // Try to get merged cell ranges if available
-    // Unfortunately, calamine v0.22.1 doesn't expose merged cell metadata directly
-    // We need to continue using our selective merge detection approach
+    // Load merged region metadata from Excel file
+    if let Err(e) = workbook.load_merged_regions() {
+        log::warn!("Could not load merged regions: {}", e);
+    } else {
+        let merged_regions = workbook.merged_regions_by_sheet(&sheet_name);
+        log::info!("Found {} merged regions in sheet '{}': {:?}", 
+                   merged_regions.len(), sheet_name, merged_regions);
+        
+        // TODO: Replace heuristic detection with metadata-based processing
+        // This will enable universal merge processing for all columns
+    }
     
     log::info!("Sheet dimensions: {}x{}", worksheet.get_size().0, worksheet.get_size().1);
     
@@ -86,13 +93,13 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
 }
 
 fn parse_worksheet_data(
-    worksheet: &Range<DataType>, 
+    worksheet: &Range<Data>, 
     conversion_map: Option<&ConversionMap>
 ) -> Result<Vec<NetworkConfigRow>, String> {
     let mut rows = Vec::new();
     
     // Get all rows from the worksheet
-    let worksheet_rows: Vec<Vec<DataType>> = worksheet.rows().map(|row| row.to_vec()).collect();
+    let worksheet_rows: Vec<Vec<Data>> = worksheet.rows().map(|row| row.to_vec()).collect();
     
     if worksheet_rows.is_empty() {
         return Ok(rows);
@@ -174,7 +181,7 @@ fn parse_worksheet_data(
 /// invalid data rows (e.g., header/category rows that span many columns).
 /// 
 /// Leading empty cells (before any value) are left as-is.
-fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
+fn propagate_merged_cells_in_row(row: &[Data]) -> Vec<Data> {
     let mut result = row.to_vec();
     
     // First check if this looks like a header/category row that shouldn't be propagated
@@ -190,7 +197,7 @@ fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
         return result; // Return original row without propagation
     }
     
-    let mut last_non_empty_value: Option<DataType> = None;
+    let mut last_non_empty_value: Option<Data> = None;
     let mut propagation_start_index: Option<usize> = None;
     
     for i in 0..result.len() {
@@ -229,7 +236,7 @@ fn propagate_merged_cells_in_row(row: &[DataType]) -> Vec<DataType> {
 /// The function identifies which columns should have merge detection applied based on
 /// field names and applies vertical propagation only to those columns.
 fn apply_selective_merged_cell_detection(
-    data_rows: &[Vec<DataType>],
+    data_rows: &[Vec<Data>],
     headers: &[String]
 ) -> Vec<HashMap<String, String>> {
     let mut result = Vec::new();
@@ -237,11 +244,14 @@ fn apply_selective_merged_cell_detection(
     // Define columns that should have merge detection applied
     // CRITICAL: Only apply merge detection to columns confirmed by user to have merged cells
     // User confirmed: Connectivity templates have merged cells
+    // REGRESSION FIX: Server names (Host Name) are also in merged cells based on Excel data evidence
     let merge_enabled_columns: std::collections::HashSet<&str> = [
         "CTs",              // Connectivity Templates - USER CONFIRMED: merged cells
         "link_group_ct_names", // Internal field name for CTs
-        // NOTE: Other columns may be added here if user confirms they have merged cells
-        // Do NOT add switch names, ports, server names unless explicitly confirmed
+        "Host Name",        // Server names - EVIDENCE: Row 3 has "r2lb103960", rows 4-10 empty
+        "server_label",     // Internal field name for Host Name
+        // NOTE: Switch names and ports confirmed by user as individual cells (no merges)
+        // Do NOT add switch names, ports unless explicitly confirmed
     ].iter().cloned().collect();
     
     // Initialize carry values only for merge-enabled columns
@@ -294,7 +304,7 @@ fn apply_selective_merged_cell_detection(
 /// Use this when your Excel data does not contain merged cells and you want to
 /// preserve the exact structure as entered in the spreadsheet.
 fn convert_raw_data_without_merges(
-    data_rows: &[Vec<DataType>],
+    data_rows: &[Vec<Data>],
     headers: &[String]
 ) -> Vec<HashMap<String, String>> {
     let mut result = Vec::new();
@@ -327,7 +337,7 @@ fn convert_raw_data_without_merges(
 /// The algorithm prioritizes vertical propagation (common in network config data) over 
 /// horizontal propagation to avoid false positives.
 fn apply_intelligent_merged_cell_detection(
-    data_rows: &[Vec<DataType>],
+    data_rows: &[Vec<Data>],
     headers: &[String]
 ) -> Vec<HashMap<String, String>> {
     let mut result = Vec::new();
@@ -373,7 +383,7 @@ fn apply_intelligent_merged_cell_detection(
 /// 
 /// This function helps avoid inappropriate horizontal propagation by checking
 /// if the horizontal merge seems like a legitimate Excel merged cell pattern.
-fn should_apply_horizontal_merge(row_with_horizontal: &[DataType], col_idx: usize) -> bool {
+fn should_apply_horizontal_merge(row_with_horizontal: &[Data], col_idx: usize) -> bool {
     // For now, use the same logic as the original propagate_merged_cells_in_row
     // but be more conservative - only allow horizontal merge if it passes the category row check
     
@@ -1043,12 +1053,12 @@ mod tests {
         // "Server1", "", "", "Port1", "", "Speed1"
         // This simulates merged cells where Server1 spans 3 columns and Port1 spans 2 columns
         let test_row = vec![
-            DataType::String("Server1".to_string()),  // First cell of merged range
-            DataType::Empty,                           // Empty cell (part of merge)
-            DataType::Empty,                           // Empty cell (part of merge)
-            DataType::String("Port1".to_string()),     // Next non-empty cell
-            DataType::Empty,                           // Empty cell (part of merge)
-            DataType::String("Speed1".to_string()),    // Standalone cell
+            Data::String("Server1".to_string()),  // First cell of merged range
+            Data::Empty,                           // Empty cell (part of merge)
+            Data::Empty,                           // Empty cell (part of merge)
+            Data::String("Port1".to_string()),     // Next non-empty cell
+            Data::Empty,                           // Empty cell (part of merge)
+            Data::String("Speed1".to_string()),    // Standalone cell
         ];
         
         let result = propagate_merged_cells_in_row(&test_row);
@@ -1068,11 +1078,11 @@ mod tests {
         
         // Test row that starts with empty cells
         let test_row = vec![
-            DataType::Empty,                          // Leading empty cell
-            DataType::Empty,                          // Leading empty cell
-            DataType::String("Value1".to_string()),   // First non-empty
-            DataType::Empty,                          // Should be propagated
-            DataType::String("Value2".to_string()),   // New value
+            Data::Empty,                          // Leading empty cell
+            Data::Empty,                          // Leading empty cell
+            Data::String("Value1".to_string()),   // First non-empty
+            Data::Empty,                          // Should be propagated
+            Data::String("Value2".to_string()),   // New value
         ];
         
         let result = propagate_merged_cells_in_row(&test_row);
@@ -1092,14 +1102,14 @@ mod tests {
         // Test category/header row that shouldn't be propagated
         // This simulates "Linux RHEL8.7" in first cell with many empty cells after
         let category_row = vec![
-            DataType::String("Linux RHEL8.7".to_string()), // Category header
-            DataType::Empty,                                // Empty
-            DataType::Empty,                                // Empty  
-            DataType::Empty,                                // Empty
-            DataType::Empty,                                // Empty
-            DataType::Empty,                                // Empty
-            DataType::Empty,                                // Empty
-            DataType::Empty,                                // Empty
+            Data::String("Linux RHEL8.7".to_string()), // Category header
+            Data::Empty,                                // Empty
+            Data::Empty,                                // Empty  
+            Data::Empty,                                // Empty
+            Data::Empty,                                // Empty
+            Data::Empty,                                // Empty
+            Data::Empty,                                // Empty
+            Data::Empty,                                // Empty
         ];
         
         let result = propagate_merged_cells_in_row(&category_row);
@@ -1122,12 +1132,12 @@ mod tests {
         // Test that propagation stops after reasonable distance
         // Make sure row has enough cells to not trigger category detection (>30% non-empty)
         let test_row = vec![
-            DataType::String("Value1".to_string()),   // Non-empty 1
-            DataType::Empty,                          // Distance 1 - should propagate
-            DataType::Empty,                          // Distance 2 - should propagate  
-            DataType::Empty,                          // Distance 3 - should propagate
-            DataType::Empty,                          // Distance 4 - should NOT propagate (too far)
-            DataType::String("Value2".to_string()),   // Non-empty 2 - prevents category detection
+            Data::String("Value1".to_string()),   // Non-empty 1
+            Data::Empty,                          // Distance 1 - should propagate
+            Data::Empty,                          // Distance 2 - should propagate  
+            Data::Empty,                          // Distance 3 - should propagate
+            Data::Empty,                          // Distance 4 - should NOT propagate (too far)
+            Data::String("Value2".to_string()),   // Non-empty 2 - prevents category detection
         ];
         
         let result = propagate_merged_cells_in_row(&test_row);
@@ -1156,31 +1166,31 @@ mod tests {
         let data_rows = vec![
             // Row 1: Has server name "r2lb103960"
             vec![
-                DataType::String("CRL01P24L09".to_string()),
-                DataType::String("2".to_string()),
-                DataType::String("r2lb103960".to_string()),
-                DataType::String("2".to_string()),
+                Data::String("CRL01P24L09".to_string()),
+                Data::String("2".to_string()),
+                Data::String("r2lb103960".to_string()),
+                Data::String("2".to_string()),
             ],
             // Row 2: Server name should be carried down from row 1
             vec![
-                DataType::String("CRL01P24L10".to_string()),
-                DataType::String("2".to_string()),
-                DataType::Empty,  // Empty - should get "r2lb103960" from above
-                DataType::String("2".to_string()),
+                Data::String("CRL01P24L10".to_string()),
+                Data::String("2".to_string()),
+                Data::Empty,  // Empty - should get "r2lb103960" from above
+                Data::String("2".to_string()),
             ],
             // Row 3: New server name "r2lb103959"
             vec![
-                DataType::String("CRL01P24L09".to_string()),
-                DataType::String("5".to_string()),
-                DataType::String("r2lb103959".to_string()),
-                DataType::String("5".to_string()),
+                Data::String("CRL01P24L09".to_string()),
+                Data::String("5".to_string()),
+                Data::String("r2lb103959".to_string()),
+                Data::String("5".to_string()),
             ],
             // Row 4: Server name should be carried down from row 3
             vec![
-                DataType::String("CRL01P24L10".to_string()),
-                DataType::String("5".to_string()),
-                DataType::Empty,  // Empty - should get "r2lb103959" from above
-                DataType::String("5".to_string()),
+                Data::String("CRL01P24L10".to_string()),
+                Data::String("5".to_string()),
+                Data::Empty,  // Empty - should get "r2lb103959" from above
+                Data::String("5".to_string()),
             ],
         ];
         
@@ -1220,17 +1230,17 @@ mod tests {
         let data_rows = vec![
             // Row 1: Has server name
             vec![
-                DataType::String("server001".to_string()),
-                DataType::String("port1".to_string()),
-                DataType::String("r2lb103960".to_string()),
-                DataType::String("eth0".to_string()),
+                Data::String("server001".to_string()),
+                Data::String("port1".to_string()),
+                Data::String("r2lb103960".to_string()),
+                Data::String("eth0".to_string()),
             ],
             // Row 2: Empty host name should get vertical merge, other fields stay as-is
             vec![
-                DataType::String("server002".to_string()),
-                DataType::String("port2".to_string()),
-                DataType::Empty,   // Should be filled vertically from "r2lb103960"
-                DataType::String("eth1".to_string()),
+                Data::String("server002".to_string()),
+                Data::String("port2".to_string()),
+                Data::Empty,   // Should be filled vertically from "r2lb103960"
+                Data::String("eth1".to_string()),
             ],
         ];
         
@@ -1266,31 +1276,31 @@ mod tests {
         let data_rows = vec![
             // Row 1: Has server name "r2lb103960"
             vec![
-                DataType::String("CRL01P24L09".to_string()),
-                DataType::String("2".to_string()),
-                DataType::String("r2lb103960".to_string()),
-                DataType::String("2".to_string()),
+                Data::String("CRL01P24L09".to_string()),
+                Data::String("2".to_string()),
+                Data::String("r2lb103960".to_string()),
+                Data::String("2".to_string()),
             ],
             // Row 2: Server name cell is empty - should get vertical merge
             vec![
-                DataType::String("CRL01P24L10".to_string()),
-                DataType::String("2".to_string()),
-                DataType::Empty,  // This will be filled by vertical merge
-                DataType::String("2".to_string()),
+                Data::String("CRL01P24L10".to_string()),
+                Data::String("2".to_string()),
+                Data::Empty,  // This will be filled by vertical merge
+                Data::String("2".to_string()),
             ],
             // Row 3: New server name "r2lb103959"  
             vec![
-                DataType::String("CRL01P24L09".to_string()),
-                DataType::String("5".to_string()),
-                DataType::String("r2lb103959".to_string()),
-                DataType::String("5".to_string()),
+                Data::String("CRL01P24L09".to_string()),
+                Data::String("5".to_string()),
+                Data::String("r2lb103959".to_string()),
+                Data::String("5".to_string()),
             ],
             // Row 4: Server name cell is empty - should get vertical merge
             vec![
-                DataType::String("CRL01P24L10".to_string()),
-                DataType::String("5".to_string()),
-                DataType::Empty,  // This will be filled by vertical merge
-                DataType::String("5".to_string()),
+                Data::String("CRL01P24L10".to_string()),
+                Data::String("5".to_string()),
+                Data::Empty,  // This will be filled by vertical merge
+                Data::String("5".to_string()),
             ],
         ];
         
@@ -1327,35 +1337,35 @@ mod tests {
         let data_rows = vec![
             // Row 1: Horizontal merge (Switch spans to Port) + Server value
             vec![
-                DataType::String("SwitchA".to_string()),
-                DataType::Empty,                            // Horizontal merge from SwitchA
-                DataType::String("ServerX".to_string()),
-                DataType::String("eth0".to_string()),
-                DataType::String("10G".to_string()),
+                Data::String("SwitchA".to_string()),
+                Data::Empty,                            // Horizontal merge from SwitchA
+                Data::String("ServerX".to_string()),
+                Data::String("eth0".to_string()),
+                Data::String("10G".to_string()),
             ],
             // Row 2: Vertical merge for Server, horizontal merge for Interface
             vec![
-                DataType::String("SwitchB".to_string()),
-                DataType::String("port2".to_string()),
-                DataType::Empty,                            // Vertical merge from ServerX
-                DataType::String("eth1".to_string()),
-                DataType::Empty,                            // Horizontal merge from eth1
+                Data::String("SwitchB".to_string()),
+                Data::String("port2".to_string()),
+                Data::Empty,                            // Vertical merge from ServerX
+                Data::String("eth1".to_string()),
+                Data::Empty,                            // Horizontal merge from eth1
             ],
             // Row 3: New server (breaks vertical merge), rectangular merge simulation
             vec![
-                DataType::String("SwitchC".to_string()),
-                DataType::Empty,                            // Horizontal from SwitchC
-                DataType::String("ServerY".to_string()),
-                DataType::Empty,                            // Horizontal from ServerY
-                DataType::Empty,                            // Horizontal from ServerY
+                Data::String("SwitchC".to_string()),
+                Data::Empty,                            // Horizontal from SwitchC
+                Data::String("ServerY".to_string()),
+                Data::Empty,                            // Horizontal from ServerY
+                Data::Empty,                            // Horizontal from ServerY
             ],
             // Row 4: Vertical continuation of ServerY
             vec![
-                DataType::String("SwitchD".to_string()),
-                DataType::String("port4".to_string()),
-                DataType::Empty,                            // Vertical merge from ServerY
-                DataType::String("eth3".to_string()),
-                DataType::String("25G".to_string()),
+                Data::String("SwitchD".to_string()),
+                Data::String("port4".to_string()),
+                Data::Empty,                            // Vertical merge from ServerY
+                Data::String("eth3".to_string()),
+                Data::String("25G".to_string()),
             ],
         ];
         

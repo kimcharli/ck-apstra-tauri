@@ -132,7 +132,7 @@ mod excel_integration_tests {
         let mut workbook: Xlsx<_> = open_workbook(&file_path).unwrap();
         let sheet_name = "4187-11";
         
-        if let Some(Ok(range)) = workbook.worksheet_range(sheet_name) {
+        if let Ok(range) = workbook.worksheet_range(sheet_name) {
             // Print headers from different rows to see structure
             for row_idx in 0..5 {
                 if let Some(row) = range.rows().nth(row_idx) {
@@ -196,7 +196,7 @@ mod excel_integration_tests {
         let mut workbook: Xlsx<_> = open_workbook(&file_path).unwrap();
         let sheet_name = "4187-11";
         
-        if let Some(Ok(range)) = workbook.worksheet_range(sheet_name) {
+        if let Ok(range) = workbook.worksheet_range(sheet_name) {
             // Get the headers from row 1 (0-based)
             if let Some(header_row) = range.rows().nth(1) {
                 let headers: Vec<String> = header_row.iter()
