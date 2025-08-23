@@ -239,7 +239,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       // Update the parent component's data if new rows were added
       if (newRowsAdded > 0 && onDataUpdate) {
         onDataUpdate(updatedData);
-        alert(`Added ${newRowsAdded} new connections from API to the provisioning table.`);
       }
 
       console.log('✅ Comparison completed:', {
@@ -266,7 +265,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     const results: ComparisonResult[] = [];
     const newRows: NetworkConfigRow[] = [];
     
-    // Create a map of API data with interface-level keys
+    // Create a map of API data with interface-level keys and merge multiple chunks
     const apiConnectionsMap = new Map<string, any>();
     
     apiResults.forEach(item => {
@@ -279,13 +278,53 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       if (switchName && serverName && switchInterface) {
         // Use switch_label + server_label + switch_ifname as key for duplicate detection
         const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
-        apiConnectionsMap.set(connectionKey, {
-          switchName,
-          serverName,
-          switchInterface,
-          serverInterface,
-          rawData: item
-        });
+        
+        // Check if this connection already exists in our map
+        const existingData = apiConnectionsMap.get(connectionKey);
+        
+        if (existingData) {
+          // Merge the data - combine all fields from both chunks
+          const mergedRawData = {
+            ...existingData.rawData,
+            ...item,
+            // Ensure critical fields are preserved from both chunks
+            link1: existingData.rawData?.link1 || item.link1,
+            switch: existingData.rawData?.switch || item.switch,
+            server: existingData.rawData?.server || item.server,
+            switch_intf: existingData.rawData?.switch_intf || item.switch_intf,
+            server_intf: existingData.rawData?.server_intf || item.server_intf,
+            intf1: existingData.rawData?.intf1 || item.intf1,
+            intf2: existingData.rawData?.intf2 || item.intf2
+          };
+          
+          // If this chunk has speed data and the existing doesn't, use it
+          if (item.link1?.speed && !existingData.rawData?.link1?.speed) {
+            mergedRawData.link1 = { ...mergedRawData.link1, speed: item.link1.speed };
+          }
+          
+          console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
+            existing: existingData.rawData,
+            new: item,
+            merged: mergedRawData
+          });
+          
+          apiConnectionsMap.set(connectionKey, {
+            switchName,
+            serverName,
+            switchInterface: switchInterface || existingData.switchInterface,
+            serverInterface: serverInterface || existingData.serverInterface,
+            rawData: mergedRawData
+          });
+        } else {
+          // First time seeing this connection
+          apiConnectionsMap.set(connectionKey, {
+            switchName,
+            serverName,
+            switchInterface,
+            serverInterface,
+            rawData: item
+          });
+        }
       }
     });
 
@@ -319,14 +358,14 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const apiData = apiConnectionsMap.get(connectionKey);
       
       if (apiData) {
-        // Found a match - compare individual fields
-        const fieldMatches = {
-          server_ifname: (row.server_ifname || '') === (apiData.serverInterface || ''),
-          link_speed: normalizeSpeed(row.link_speed || '') === normalizeSpeed(apiData.rawData?.link_speed || ''),
-          link_group_lag_mode: (row.link_group_lag_mode || '') === (apiData.rawData?.lag_mode || ''),
-          link_group_ct_names: (row.link_group_ct_names || '') === (apiData.rawData?.ct_names || ''),
-          is_external: row.is_external === (apiData.rawData?.is_external || false),
-        };
+        // Found a match - use unified field comparison function
+        const fieldMatches = compareFields(row, apiData);
+        
+        console.log(`🔍 Field comparison for ${switchName}-${serverName}:`, {
+          tableSpeed: row.link_speed,
+          apiSpeed: apiData.rawData?.link1?.speed || apiData.link1?.speed,
+          fieldMatches
+        });
 
         results.push({
           status: 'match',
@@ -357,15 +396,20 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         });
 
         // Create new row for the extra connection found in API
+        // Extract speed and other data from the merged API result
+        const apiSpeed = apiData.rawData?.link1?.speed || '';
+        const apiLagMode = apiData.rawData?.lag_mode || '';
+        const apiCtNames = apiData.rawData?.ct_names || '';
+        
         const newRow: NetworkConfigRow = {
           blueprint: 'DH4-Colo2', // Use the same blueprint we queried
           switch_label: apiData.switchName,
           switch_ifname: apiData.switchInterface || '',
           server_label: apiData.serverName,
           server_ifname: apiData.serverInterface || '',
-          link_speed: '', // Will need to be filled manually or from additional API data
-          link_group_lag_mode: '',
-          link_group_ct_names: '',
+          link_speed: apiSpeed, // Populate from merged API data
+          link_group_lag_mode: apiLagMode,
+          link_group_ct_names: apiCtNames,
           link_group_ifname: '',
           is_external: false,
           server_tags: '',
@@ -382,22 +426,27 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     const combinedData = [...tableData, ...newRows];
     const groupedData = groupConnectionsByServer(combinedData);
 
-    // Store the API data map for field-level comparisons
+    // Store the API data map for field-level comparisons using merged data
     const finalApiDataMap = new Map<string, any>();
-    console.log('🗺️ Creating API data map from', apiResults.length, 'API results');
+    console.log('🗺️ Creating API data map from merged connection data');
     
-    apiResults.forEach((item) => {
-      const switchName = item.switch?.label || item.switch?.hostname;
-      const serverName = item.server?.label || item.server?.hostname;
-      const switchInterface = item.switch_intf?.if_name || item.intf1?.if_name;
-      
-      if (switchName && serverName && switchInterface) {
-        const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
-        finalApiDataMap.set(connectionKey, item);
+    // Use the merged data from apiConnectionsMap for consistent field comparisons
+    [...apiConnectionsMap.entries()].forEach(([connectionKey, connectionData]) => {
+      finalApiDataMap.set(connectionKey, connectionData.rawData);
+    });
+    
+    // Also add any new rows we created to the map
+    newRows.forEach(row => {
+      if (row.switch_label && row.server_label && row.switch_ifname) {
+        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const apiData = apiConnectionsMap.get(connectionKey);
+        if (apiData?.rawData) {
+          finalApiDataMap.set(connectionKey, apiData.rawData);
+        }
       }
     });
     
-    console.log('🗺️ Final API data map has', finalApiDataMap.size, 'entries');
+    console.log('🗺️ Final API data map has', finalApiDataMap.size, 'entries with merged data');
 
     return {
       comparisonResults: results,
@@ -407,34 +456,53 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     };
   };
 
-  // Helper function to check if a field matches API data
+  // Unified field comparison function - single source of truth for all field matching logic
+  const compareFields = (row: NetworkConfigRow, apiData: any): {
+    server_label: boolean;
+    server_ifname: boolean;
+    link_speed: boolean;
+    link_group_lag_mode: boolean;
+    link_group_ct_names: boolean;
+    is_external: boolean;
+  } => {
+    if (!apiData) {
+      return {
+        server_label: false,
+        server_ifname: false,
+        link_speed: false,
+        link_group_lag_mode: false,
+        link_group_ct_names: false,
+        is_external: false
+      };
+    }
+
+    // Extract API values with proper fallback paths
+    const apiServerInterface = apiData.server_intf?.if_name || apiData.intf2?.if_name || apiData.serverInterface || '';
+    const apiSpeedRaw = apiData.link1?.speed || apiData.rawData?.link1?.speed || '';
+    const apiLagMode = apiData.lag_mode || apiData.rawData?.lag_mode || '';
+    const apiCtNames = apiData.ct_names || apiData.rawData?.ct_names || '';
+    const apiExternal = apiData.is_external || apiData.rawData?.is_external || false;
+
+    // Normalize speeds for comparison
+    const tableSpeedNormalized = normalizeSpeed(row.link_speed || '');
+    const apiSpeedNormalized = normalizeSpeed(apiSpeedRaw);
+
+    return {
+      server_label: true, // Server exists in API data if we have apiData
+      server_ifname: (row.server_ifname || '') === apiServerInterface,
+      link_speed: tableSpeedNormalized === apiSpeedNormalized,
+      link_group_lag_mode: (row.link_group_lag_mode || '') === apiLagMode,
+      link_group_ct_names: (row.link_group_ct_names || '') === apiCtNames,
+      is_external: row.is_external === apiExternal
+    };
+  };
+
+  // Helper function to check if a specific field matches API data
   const hasFieldMatch = (row: NetworkConfigRow, columnKey: string): boolean => {
     const apiData = getServerApiData(row);
+    const fieldMatches = compareFields(row, apiData);
     
-    if (!apiData) return false;
-
-    switch (columnKey) {
-      case 'server_label':
-        // Server exists in API data
-        return true;
-      case 'server_ifname':
-        const apiServerInterface = apiData.server_intf?.if_name || apiData.intf2?.if_name;
-        return (row.server_ifname || '') === (apiServerInterface || '');
-      case 'link_speed':
-        const apiSpeed = apiData.link_speed || '';
-        return normalizeSpeed(row.link_speed || '') === normalizeSpeed(apiSpeed);
-      case 'link_group_lag_mode':
-        const apiLagMode = apiData.lag_mode || '';
-        return (row.link_group_lag_mode || '') === (apiLagMode || '');
-      case 'link_group_ct_names':
-        const apiCtNames = apiData.ct_names || '';
-        return (row.link_group_ct_names || '') === (apiCtNames || '');
-      case 'is_external':
-        const apiExternal = apiData.is_external || false;
-        return row.is_external === apiExternal;
-      default:
-        return false;
-    }
+    return fieldMatches[columnKey as keyof typeof fieldMatches] || false;
   };
 
   // Helper function to get server data from API results (for rendering as button)

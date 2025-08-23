@@ -133,6 +133,12 @@ use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 
 **Session Management**: Stateful authentication with automatic token refresh
 
+**CRITICAL API Data Merging**: Apstra graph queries return same connection across multiple result chunks. Must merge chunks to preserve speed data. See **@docs/core-features.md** section "CRITICAL: Apstra API Data Merging".
+
+- ❌ **NEVER** overwrite API result chunks without merging
+- ✅ **ALWAYS** merge to preserve speed/LAG mode/CT data
+- ✅ Located in `ProvisioningTable.tsx` `compareAndUpdateConnectivityData()`
+
 ## Critical File Locations
 
 - **Excel Parser**: `src-tauri/src/commands/data_parser.rs`

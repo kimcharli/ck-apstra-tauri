@@ -287,6 +287,63 @@ let merge_enabled_columns: std::collections::HashSet<&str> = [
 - **Intelligent Processing**: Only process when data differs from existing state (no-op optimization)
 - **Selective Operations**: Only process interfaces with actual configuration changes needed
 
+### CRITICAL: Apstra API Data Merging
+
+**ESSENTIAL IMPLEMENTATION**: The application must properly merge multiple API result chunks for the same connection due to Apstra's graph query structure with optional sections.
+
+**Problem Context**:
+Apstra's connectivity graph query with optional sections returns the same logical connection across multiple result items. Each result chunk may contain different pieces of information:
+- Chunk 1: Basic connection (switch, server, interface names)  
+- Chunk 2: Speed data (`link1.speed`)
+- Chunk 3: LAG mode and connectivity templates
+- Additional chunks: External connectivity, redundancy group data
+
+**Critical Implementation** in `ProvisioningTable.tsx`:
+
+```typescript
+// REQUIRED: Multi-chunk merging algorithm
+apiResults.forEach(item => {
+  const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
+  const existingData = apiConnectionsMap.get(connectionKey);
+  
+  if (existingData) {
+    // Merge all fields from both chunks - preserve all data
+    const mergedRawData = {
+      ...existingData.rawData,
+      ...item,
+      // Ensure critical fields are preserved from both chunks
+      link1: existingData.rawData?.link1 || item.link1,
+      switch: existingData.rawData?.switch || item.switch,
+      server: existingData.rawData?.server || item.server,
+    };
+    
+    // Speed data preservation is CRITICAL
+    if (item.link1?.speed && !existingData.rawData?.link1?.speed) {
+      mergedRawData.link1 = { ...mergedRawData.link1, speed: item.link1.speed };
+    }
+    
+    apiConnectionsMap.set(connectionKey, {
+      switchName, serverName, switchInterface, serverInterface,
+      rawData: mergedRawData // Complete merged data
+    });
+  }
+});
+```
+
+**NEVER Rules**:
+- ❌ **NEVER** overwrite API result chunks without merging - causes data loss
+- ❌ **NEVER** assume first API result contains all connection data  
+- ❌ **NEVER** ignore speed data from secondary chunks
+- ❌ **NEVER** leave "Only in Blueprint" connections with empty speed fields
+
+**ALWAYS Rules**:
+- ✅ **ALWAYS** merge all API result chunks for same connection key
+- ✅ **ALWAYS** preserve speed data from any chunk that contains it
+- ✅ **ALWAYS** populate new provisioning table rows with merged API data
+- ✅ **ALWAYS** test provisioning table shows complete speed information
+
+**Validation**: Speed data must appear in provisioning table Link Speed column and be properly color-coded for match/mismatch/blueprint-only status.
+
 ## 4.4 Conversion Mapping Architecture
 
 ### System Design

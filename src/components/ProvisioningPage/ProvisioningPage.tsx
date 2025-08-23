@@ -243,24 +243,28 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
             <div className="filter-tabs">
               <button 
                 className={`filter-tab ${activeFilter === 'match' ? 'active' : ''}`}
+                data-filter="match"
                 onClick={() => setActiveFilter('match')}
               >
                 Match
               </button>
               <button 
                 className={`filter-tab ${activeFilter === 'mismatch' ? 'active' : ''}`}
+                data-filter="mismatch"
                 onClick={() => setActiveFilter('mismatch')}
               >
                 Mismatch
               </button>
               <button 
                 className={`filter-tab ${activeFilter === 'blueprint' ? 'active' : ''}`}
+                data-filter="blueprint"
                 onClick={() => setActiveFilter('blueprint')}
               >
                 Only in Blueprint
               </button>
               <button 
                 className={`filter-tab ${activeFilter === 'ct-not-found' ? 'active' : ''}`}
+                data-filter="ct-not-found"
                 onClick={() => setActiveFilter('ct-not-found')}
               >
                 CT Not Found
@@ -276,6 +280,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
               data={tableData} 
               isLoading={isLoadingData}
               onProvision={handleProvisionData}
+              onDataUpdate={setTableData}
               apstraConfig={apstraConfig}
             />
           </div>

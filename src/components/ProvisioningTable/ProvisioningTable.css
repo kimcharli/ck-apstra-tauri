@@ -106,7 +106,7 @@
 
 .provisioning-table th {
   background-color: #f8f9fa;
-  border-bottom: 2px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
   padding: 12px 8px;
   text-align: left;
   font-weight: 600;
@@ -114,6 +114,8 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  border-left: none;
+  border-right: none;
 }
 
 .provisioning-table th.sortable {
@@ -146,6 +148,8 @@
 .provisioning-table td {
   padding: 10px 8px;
   border-bottom: 1px solid #dee2e6;
+  border-left: none;
+  border-right: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -185,7 +189,6 @@
 
 .table-cell.blueprint-only {
   background-color: #e7f3ff;
-  border-left: 3px solid #007bff;
   font-style: italic;
 }
 
