@@ -1,18 +1,179 @@
 # Development Documentation
 
+Complete guide for developing the Apstra Network Configuration Tool.
+
+## Prerequisites & Setup
+
+### System Requirements
+
+**Operating System Support:**
+- macOS 10.15+ (Catalina or later)
+- Windows 10/11 (with WSL2 recommended for development)
+- Ubuntu 18.04+ / Debian 10+ / RHEL 8+ / Fedora 35+
+
+**Hardware Requirements:**
+- 8GB RAM minimum (16GB recommended)
+- 10GB free disk space
+- Network connectivity for package downloads
+
+### Required Software
+
+#### 1. Node.js and npm
+**Version Required:** Node.js 18.x or 20.x LTS
+
+**Installation:**
+
+**macOS:**
+```bash
+# Using Homebrew (recommended)
+brew install node@20
+
+# Using NodeSource repository
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify installation
+node --version  # Should show v20.x.x
+npm --version   # Should show 9.x.x or higher
+```
+
+**Windows:**
+```powershell
+# Using Chocolatey (recommended)
+choco install nodejs-lts
+
+# Using winget
+winget install OpenJS.NodeJS.LTS
+
+# Manual download from https://nodejs.org/
+# Download and run the Windows Installer (.msi)
+```
+
+**Linux:**
+```bash
+# Ubuntu/Debian
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# RHEL/CentOS/Fedora
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install nodejs npm
+
+# Verify installation
+node --version
+npm --version
+```
+
+#### 2. Rust and Cargo
+**Version Required:** Rust 1.70+ (latest stable recommended)
+
+**Installation:**
+```bash
+# Install Rust using rustup (all platforms)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# Update to latest stable
+rustup update stable
+
+# Verify installation
+rustc --version  # Should show 1.70.0 or higher
+cargo --version
+```
+
+#### 3. Tauri CLI
+**Installation:**
+```bash
+# Install globally via npm (recommended)
+npm install -g @tauri-apps/cli
+
+# Or install via cargo
+cargo install tauri-cli
+
+# Verify installation
+tauri --version
+```
+
+#### 4. Platform-Specific Dependencies
+
+**macOS:**
+```bash
+# Xcode Command Line Tools (required for compilation)
+xcode-select --install
+
+# Additional dependencies via Homebrew
+brew install pkg-config
+```
+
+**Linux (Ubuntu/Debian):**
+```bash
+# Required system libraries
+sudo apt update
+sudo apt install -y \
+  libwebkit2gtk-4.0-dev \
+  build-essential \
+  curl \
+  wget \
+  file \
+  libssl-dev \
+  libgtk-3-dev \
+  libayatana-appindicator3-dev \
+  librsvg2-dev \
+  pkg-config
+```
+
+**Linux (RHEL/CentOS/Fedora):**
+```bash
+# Required system libraries
+sudo dnf groupinstall "C Development Tools and Libraries"
+sudo dnf install \
+  webkit2gtk4.0-devel \
+  openssl-devel \
+  curl \
+  wget \
+  file \
+  libappindicator-gtk3-devel \
+  librsvg2-devel \
+  pkg-config
+```
+
+**Windows:**
+```powershell
+# Visual Studio Build Tools (required)
+# Download and install from: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022
+
+# Install Microsoft C++ Build Tools
+# Or install Visual Studio Community with C++ development tools
+
+# WebView2 (usually pre-installed on Windows 10/11)
+# If needed, download from: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
+```
+
 ## Development Commands
 
-- `npm run tauri:dev` - Start development server
+### Core Development
+- `npm run tauri:dev` - Start development server with hot reload
 - `npm run tauri:build` - Build application for production
+- `npm run dev` - Start frontend development server only (for UI development)
+
+### Testing
 - `cargo test` - Run Rust backend tests (from src-tauri directory)
 - `npm test` - Run frontend tests with Vitest
 - `npm run test:ui` - Run tests with Vitest UI
 - `npm run test:rust` - Run Rust backend tests
 - `npm run test:integration` - Run integration tests
-- `npm run dev` - Start frontend development server only
-- `RUST_LOG=debug npm run tauri:dev` - Start with debug logging
+- `npm run test:watch` - Run tests in watch mode
+
+### Code Quality
 - `npm run lint` - TypeScript type checking
 - `npm run lint:rust` - Rust code linting with Clippy
+- `npm run format` - Format code with Prettier
+- `cargo fmt` - Format Rust code
+
+### Debug and Logging
+- `RUST_LOG=debug npm run tauri:dev` - Start with debug logging
+- `RUST_LOG=trace npm run tauri:dev` - Maximum verbosity logging
+- `npm run debug:frontend` - Frontend debugging tools
 
 ## Debug Logging
 

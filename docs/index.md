@@ -10,24 +10,23 @@ Comprehensive technical documentation for the Apstra Network Configuration Tool.
 - **[User Troubleshooting](./user/troubleshooting.md)** - Solutions for common user issues
 
 ### **Developers Start Here:**
-- **[Development Setup Guide](./development/setup.md)** - Complete environment setup with troubleshooting
-- **[Architecture Overview](./architecture/overview.md)** - Visual system architecture and component relationships
-- **[Development Troubleshooting](./development/troubleshooting.md)** - Common development issues and debugging
+- **[Development Guide](./development.md)** - Complete setup, commands, principles, and troubleshooting
+- **[Architecture Overview](./architecture.md)** - System design patterns and deployment
+- **[Data Flow Diagrams](./architecture/data-flow.md)** - Visual processing sequences and flows
 
 ## Core Technical Documentation
 
 ### Architecture & Design
 
-#### [Architecture Overview](./architecture/overview.md)
-Visual system architecture with detailed diagrams:
-- System architecture with component relationships
-- Data flow patterns and processing pipelines  
-- Component hierarchy and service architecture
-- Security architecture and performance optimization
-- Integration points and deployment strategy
+#### [Architecture Overview](./architecture.md)
+Complete system architecture and design:
+- System design patterns and build processes  
+- Component relationships and service architecture
+- Security considerations and performance optimization
+- Native application distribution and deployment strategy
 
 #### [Data Flow Documentation](./architecture/data-flow.md)
-Detailed processing sequences and state management:
+Visual processing sequences with Mermaid diagrams:
 - Excel processing pipeline with transformation flow
 - API integration flow with authentication sequences
 - State management and error propagation patterns
@@ -35,22 +34,19 @@ Detailed processing sequences and state management:
 
 ### Core Features & Implementation
 
-#### [Core Features Specification](./core-features.md)
-Complete specification of implemented features including:
-- Excel file processing and sheet selection
-- Conversion mapping system for flexible header translation
-- Data validation and processing workflows
-- **Apstra API integration and live search capabilities**
-- Interactive table visualization
-- Comprehensive logging and audit systems
+#### [Core Features & Data Processing](./core-features.md)
+Complete Excel processing and network features:
+- Two-phase field mapping algorithm and speed normalization
+- Excel merged cell handling and conversion mapping system  
+- Data validation workflows and interface naming conventions
+- Switch interface generation and processing pipelines
 
 #### [API Integration](./api-integration.md)
-Apstra REST API integration details:
-- Session-based authentication with secure token management
-- Real-time system search using graph query engine
-- Blueprint management operations (Leafs, Dump)
-- URL generation for seamless Apstra web navigation
-- Comprehensive error handling and user feedback
+Comprehensive Apstra API integration:
+- Session management and authentication architecture
+- Real-time system search and blueprint operations  
+- URL generation utilities and error handling patterns
+- MCP server integration and state management
 
 #### [Authentication Architecture](./authentication-architecture.md)
 Centralized authentication system design:
@@ -58,23 +54,15 @@ Centralized authentication system design:
 - Enhanced authentication service with retry logic
 - Comprehensive error classification and handling
 - Session lifecycle management and cleanup
-- Type-safe authentication state management
 
 ### Development & Quality
 
-#### [Development Setup Guide](./development/setup.md)
-Complete development environment setup:
-- Platform-specific prerequisites and dependencies
-- Step-by-step installation with verification
-- Common setup issues and troubleshooting
-- IDE recommendations and performance optimization
-
-#### [Development Troubleshooting](./development/troubleshooting.md)
-Comprehensive debugging guide:
-- Build and setup error solutions
-- Runtime and processing error patterns
-- API integration debugging techniques
-- File processing troubleshooting methods
+#### [Complete Development Guide](./development.md)
+All-in-one developer resource:
+- Platform-specific setup and installation requirements
+- Development commands, testing, and debugging tools
+- Core principles, patterns, and regression prevention rules
+- Comprehensive troubleshooting and issue resolution
 
 ## UI/UX Design Documentation
 

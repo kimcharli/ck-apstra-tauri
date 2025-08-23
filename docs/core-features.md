@@ -18,7 +18,16 @@ This document outlines the implemented core features of the Apstra Network Confi
 - Selection persistence until processing completion
 
 ### Data Parsing Engine
-- **Required Column Headers**:
+
+**Excel Parsing Pipeline**:
+- Excel (.xlsx) file upload with temporary storage
+- Sheet selection interface after upload
+- Header mapping for network configuration fields (blueprint, server_label, is_external, etc.)
+- Row validation with duplicate detection (skip rows with same switch + switch_ifname)
+- Sortable table display with filtering capabilities
+- Automatic cleanup of temporary files after processing
+
+**Required Column Headers**:
   ```
   - Switch (switch_label)
   - Switch Interface (switch_ifname)
@@ -34,13 +43,55 @@ This document outlines the implemented core features of the Apstra Network Confi
   - Server Tags
   ```
 
+**Two-Phase Field Mapping Algorithm**:
+
+**CRITICAL**: The field mapping algorithm uses a two-phase approach to ensure exact matches take absolute priority over partial matches:
+
+- **Phase 1 - Exact Match Priority**: Process ALL headers for exact matches first
+  - Normalized comparison (case-insensitive, whitespace-normalized, line break handling)
+  - Each conversion map entry checked against all headers
+  - Once exact match found, field is locked and won't be overwritten
+
+- **Phase 2 - Partial Match Fallback**: Only process headers not mapped in Phase 1
+  - Contains-based matching for flexibility
+  - Longer conversion map entries processed first for specificity
+  - Only maps to fields not already claimed in Phase 1
+
+**Regression Prevention**: This prevents issues like "Port" column being incorrectly mapped to "Trunk/Access Port" column due to partial matching. The exact match "Port" → `switch_ifname` will always take priority over partial matches.
+
 ### Conversion Mapping System
-- **Default Conversion Map**: Ships with predefined Excel header mappings loaded from embedded JSON
-- **User Customization**: Users can modify conversion mappings through dedicated UI interface
-- **Flexible Loading**: Support loading conversion maps from external JSON files
-- **Persistent Configuration**: Save user customizations to local configuration files
-- **Header Row Configuration**: Configurable header row location (default: row 1)
-- **Dynamic Updates**: Conversion map changes immediately apply to current Excel data
+
+**CRITICAL FEATURE**: The application supports fully dynamic, customer-configurable conversion maps without requiring code changes or recompilation.
+
+**Three-Tier Fallback System**:
+1. **User-provided conversion map** (highest priority) - Runtime JSON configuration
+2. **Default conversion map** from `data/default_conversion_map.json`
+3. **Built-in fallback logic** with common field variations (lowest priority)
+
+**JSON Configuration Format**:
+```json
+{
+    "header_row": 2,
+    "mappings": {
+        "Switch Name": "switch_label",
+        "Port": "switch_ifname", 
+        "Host Name": "server_label",
+        "Slot/Port": "server_ifname",
+        "Custom Field": "target_field"
+    }
+}
+```
+
+**File Locations**:
+- **Default**: `data/default_conversion_map.json` (embedded in application)
+- **User Custom**: App data directory `/conversion_maps/user_conversion_map.json`
+- **Project Specific**: Any file path via `ConversionService::load_conversion_map_from_file()`
+
+**Intelligent Header Matching**:
+- **Specificity Priority**: Longer header matches processed first (`"Slot/Port"` before `"Slot"`)
+- **Normalization**: Case-insensitive, whitespace-normalized, line break handling (`\r\n`)
+- **Exact + Partial Matching**: Supports both precise matches and flexible partial matching
+- **Conflict Prevention**: Already-mapped fields protected from less-specific overwrites
 
 ### Data Validation Rules
 - **Conversion-Based Mapping**: Use conversion maps to translate Excel headers to internal field names
@@ -49,6 +100,73 @@ This document outlines the implemented core features of the Apstra Network Confi
 - **Duplicate Detection**: Skip rows with identical switch + switch_ifname combinations
 - **Data Type Validation**: Validate field formats and constraints based on target field types
 - **Error Aggregation**: Collect and report all validation issues with specific row/column context
+
+### Speed Normalization System
+
+**CRITICAL**: Prevents "25G Gbps" display issues through two-part normalization:
+
+**Backend Data Normalization**:
+```rust
+fn normalize_link_speed(speed: &str) -> String {
+    // Converts Excel formats to clean units:
+    // "25GB" -> "25G"
+    // "100MB" -> "100M" 
+    // "25 Gbps" -> "25G"
+    // "10" -> "10G" (raw numbers assume GB)
+}
+```
+
+**Frontend Display Logic**:
+```typescript
+case 'link_speed':
+  // Don't add Gbps if the value already has a unit (G, M, etc.)
+  if (value && typeof value === 'string' && /[GM]$/.test(value)) {
+    return value;  // Return "25G" as-is
+  }
+  return value ? `${value} Gbps` : '';  // Legacy: "10" -> "10 Gbps"
+```
+
+### Switch Interface Naming Convention
+
+**CRITICAL**: Automatic interface name generation based on speed and port number for network provisioning.
+
+**Speed-Based Interface Prefixes**:
+```
+> 10G  → "et-" (Ethernet, 25G, 40G, 100G, etc.)
+= 10G  → "xe-" (10 Gigabit Ethernet) 
+< 10G  → "ge-" (Gigabit Ethernet, 1G, etc.)
+```
+
+**Interface Format**: `{prefix}-0/0/{port_number}`
+
+**Examples**:
+- Port "2" + Speed "25G" → `"et-0/0/2"`
+- Port "5" + Speed "10G" → `"xe-0/0/5"`  
+- Port "1" + Speed "1G" → `"ge-0/0/1"`
+
+### Excel Merged Cell Handling
+
+**CRITICAL IMPLEMENTATION**: The application includes intelligent merged cell detection specifically designed for network configuration data patterns.
+
+**Key Design Decisions**:
+- **Vertical-Only Propagation**: Only propagates values vertically (down rows) to avoid false positives from horizontal propagation
+- **Server Name Focus**: Primarily designed to handle server names that span multiple rows in merged cells
+- **Conservative Approach**: Avoids complex horizontal merge detection that could introduce errors in network data
+
+**SELECTIVE COLUMN PROCESSING**:
+```rust
+let merge_enabled_columns: std::collections::HashSet<&str> = [
+    "CTs",              // Connectivity Templates - USER CONFIRMED: merged cells
+    "link_group_ct_names", // Internal field name for CTs  
+    "Host Name",        // Server names - EVIDENCE: merged cells detected
+    "server_label",     // Internal field name for Host Name
+].iter().cloned().collect();
+```
+
+**CURRENT STATUS**: 
+- **Working**: Selective heuristic processing (server names and CTs)
+- **Available**: Complete Excel merged region metadata via calamine 0.30.0 API
+- **Next**: Replace heuristics with universal metadata-based processing
 
 ### Defensive Data Processing
 **CRITICAL**: Apply defensive programming for robust Excel processing:

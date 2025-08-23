@@ -1,71 +1,447 @@
-# Apstra REST API Integration
+# Apstra API Integration Documentation
 
 ## Overview
-The application now includes direct integration with Apstra AOS REST API, enabling real-time system search and network infrastructure management capabilities.
 
-## Implementation Architecture
+The application implements comprehensive integration with Apstra controllers through a robust API service layer that provides session management, real-time search capabilities, and seamless web interface integration.
+
+## Architecture Components
 
 ### Backend Services (Rust)
-- **ApstraApiClient**: Core HTTP client with session-based authentication
-- **Authentication Management**: Secure token handling with AuthToken header pattern
-- **Query Engine Integration**: Direct access to Apstra's graph query engine at `/api/blueprints/{blueprint_id}/qe`
-- **Error Handling**: Comprehensive error handling for network, authentication, and API failures
+
+**Core API Handler** (`src-tauri/src/commands/apstra_api_handler.rs`):
+- Tauri command handlers for API operations
+- Session state management with global `ApiClientState`
+- Error handling and response transformation
+
+**API Service Layer** (`src-tauri/src/services/apstra_api_service.rs`):
+- Core API service implementation
+- Session management and authentication
+- HTTP client configuration and request handling
 
 ### Frontend Services (TypeScript)
-- **ApstraApiService**: TypeScript wrapper providing clean API interface
-- **Authentication Flow**: Automatic authentication using stored Apstra configuration
-- **Real-time Results**: Live display of search results with JSON formatting
-- **Status Management**: Visual authentication and connection status indicators
 
-## Features Implemented
+**API Service** (`src/services/ApstraApiService.ts`):
+- TypeScript service layer for API communication
+- Type-safe interfaces and error handling
+- Frontend session state management
 
-### System Search Functionality
-- **Query Format**: Implements `match(node('system', label='{server_name}', name='system'))` pattern
-- **Blueprint Selection**: Dropdown selector and text input for flexible blueprint targeting
-- **Result Display**: Structured JSON output with result count and detailed system information
-- **Error Feedback**: User-friendly error messages for authentication and network issues
+**URL Generation** (`src/utils/apstraUrls.ts`):
+- Dynamic Apstra web interface URL generation
+- Blueprint and system navigation utilities
+- Safe parameter validation
 
-### Authentication & Session Management
-- **Automatic Login**: Seamless authentication using user's stored Apstra configuration
-- **Session Persistence**: Maintains authentication state throughout application session
-- **Token Management**: Secure handling of AuthToken headers for API requests
-- **Connection Status**: Real-time authentication status indicators in UI
+## Session Management
 
-### Integration with Existing Systems
-- **Logging Integration**: All API interactions logged through comprehensive logging service
-- **Configuration Reuse**: Leverages existing Apstra configuration management
-- **Navigation Integration**: Seamless access through Tools page navigation
-- **Error Reporting**: Integrated error handling with existing notification systems
+### Authentication Flow
 
-## API Endpoints Utilized
-- `POST /api/aaa/login`: Authentication with username/password
-- `POST /api/blueprints/{blueprint_id}/qe`: Query execution against blueprint graphs
-- Authentication via AuthToken header as specified in API documentation
+**Login Process**:
+```typescript
+interface LoginInfo {
+    base_url: string;
+    username: string;
+    password: string;
+    session_id?: string;
+}
 
-## Technical Implementation Details
+const loginResult = await ApstraApiService.login({
+    base_url: 'https://apstra.company.com:443',
+    username: 'user',
+    password: 'pass'
+});
+```
 
-### Rust Backend Commands
-- `apstra_login`: Session-based authentication with credential validation
-- `apstra_search_systems`: System search using graph query language
-- `apstra_execute_query`: Generic query execution for custom searches
-- `apstra_is_authenticated`: Authentication status verification
-- `apstra_logout`: Session cleanup and token invalidation
+**Session State**:
+- Secure credential storage with session token management
+- Automatic session refresh on expiry
+- Global state persistence across application lifecycle
+- Thread-safe session state management in Rust backend
 
-### Security Considerations
-- **Credential Protection**: Passwords masked in logs and error messages
-- **SSL/TLS Support**: Configurable SSL certificate validation
-- **Session Management**: Secure token storage and automatic cleanup
-- **Error Sanitization**: Sensitive information filtered from user-facing errors
+**Session Validation**:
+```rust
+// Backend session management
+pub struct ApiClientState {
+    pub client: Option<ApstraApiClient>,
+    pub session_id: Option<String>,
+    pub base_url: Option<String>,
+}
 
-## Usage Workflow
-1. **Authentication**: Application automatically authenticates using stored Apstra config
-2. **Blueprint Selection**: User selects target blueprint from dropdown or enters label
-3. **System Search**: User enters system hostname and executes search
-4. **Results Display**: API response displayed with result count and detailed system data
-5. **Error Handling**: Clear feedback for authentication, network, or API failures
+// Automatic session validation and refresh
+async fn ensure_valid_session(state: &ApiClientState) -> Result<(), String> {
+    // Validate current session or re-authenticate
+}
+```
 
-## Future API Extensions
-- **IP Address Search**: Enhanced search capabilities for IP/CIDR ranges
-- **Blueprint Management**: CRUD operations for blueprint manipulation
-- **Device Configuration**: Direct device configuration API integration
-- **Batch Operations**: Multi-system search and management capabilities
+## API Operations
+
+### System Search
+
+**Real-time Search Capabilities**:
+```typescript
+interface SystemSearchRequest {
+    session_id: string;
+    blueprint_id: string;
+    server_name: string;
+}
+
+interface QueryResponse {
+    items: Array<object>;
+    count: number;
+}
+
+const searchResults = await ApstraApiService.searchSystems({
+    session_id: currentSession.id,
+    blueprint_id: 'blueprint-123',
+    server_name: 'server-*'
+});
+```
+
+### Blueprint Operations
+
+**Core Operations**:
+- **Leafs Operation**: Extract leaf node information from blueprints
+- **Dump Operation**: Complete blueprint data export
+- **Live Search**: Real-time system and IP address search across blueprints
+- **System Queries**: Equipment and interface information retrieval
+
+**Blueprint Management**:
+```rust
+// Backend blueprint operations
+pub async fn get_blueprint_leafs(blueprint_id: String) -> Result<Vec<LeafNode>, String> {
+    // Implementation for extracting leaf node data
+}
+
+pub async fn dump_blueprint_data(blueprint_id: String) -> Result<BlueprintData, String> {
+    // Implementation for complete blueprint export
+}
+```
+
+### IP Address Management
+
+**Search and Validation**:
+- Real-time IP address search across blueprint contexts
+- Network validation and conflict detection
+- Integration with network provisioning workflows
+
+## URL Generation
+
+### Dynamic Web Interface URLs
+
+**System Navigation**:
+```typescript
+// Generate system detail page URL
+const systemUrl = generateApstraUrls.system({
+    host: 'apstra.company.com:443',
+    blueprintId: 'blueprint-123',
+    nodeId: 'node-456'
+});
+// Result: https://apstra.company.com:443/blueprints/blueprint-123/staged/systems/node-456
+```
+
+**Blueprint Navigation**:
+```typescript
+// Generate blueprint staged page URL
+const blueprintUrl = generateApstraUrls.blueprint({
+    host: 'apstra.company.com:443',
+    blueprintId: 'blueprint-123'
+});
+// Result: https://apstra.company.com:443/blueprints/blueprint-123/staged
+```
+
+**Interface Navigation**:
+```typescript
+// Generate interface detail page URL
+const interfaceUrl = generateApstraUrls.interface({
+    host: 'apstra.company.com:443',
+    blueprintId: 'blueprint-123',
+    nodeId: 'node-456'
+});
+// Result: https://apstra.company.com:443/blueprints/blueprint-123/staged/systems/node-456/interfaces
+```
+
+### URL Safety and Validation
+
+**Parameter Validation**:
+- Safe construction of Apstra web interface URLs
+- Parameter sanitization and encoding
+- Protocol and host validation
+- Path injection prevention
+
+## Error Handling
+
+### Comprehensive Error Management
+
+**Backend Error Types**:
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum ApstraApiError {
+    #[error("Authentication failed: {0}")]
+    AuthenticationError(String),
+    
+    #[error("Session expired: {0}")]
+    SessionExpiredError(String),
+    
+    #[error("Network error: {0}")]
+    NetworkError(String),
+    
+    #[error("API response error: {0}")]
+    ApiResponseError(String),
+}
+```
+
+**Frontend Error Handling**:
+```typescript
+interface ApiError {
+    code: string;
+    message: string;
+    context?: string;
+}
+
+class ApstraApiService {
+    static async handleApiError(error: unknown): Promise<ApiError> {
+        // Comprehensive error parsing and user-friendly messages
+        if (error.status === 401) {
+            return { code: 'AUTH_FAILED', message: 'Session expired. Please log in again.' };
+        }
+        // Additional error handling...
+    }
+}
+```
+
+### Error Recovery Patterns
+
+**Automatic Recovery**:
+- Session timeout handling with automatic re-authentication
+- Network failure retry with exponential backoff
+- Graceful degradation when API is unavailable
+
+**User Feedback**:
+- Clear error messages with actionable guidance
+- Progress indicators for long-running operations
+- Status updates and operation history tracking
+
+## State Management
+
+### Client-Side State
+
+**Session Persistence**:
+```typescript
+interface SessionState {
+    isAuthenticated: boolean;
+    sessionId: string | null;
+    baseUrl: string | null;
+    username: string | null;
+    lastActivity: Date;
+}
+
+class SessionManager {
+    static saveSession(session: SessionState): void {
+        // Secure local storage of session information
+    }
+    
+    static restoreSession(): SessionState | null {
+        // Restore previous session on application restart
+    }
+}
+```
+
+### Backend State Management
+
+**Global State**:
+```rust
+// Tauri state management for API client persistence
+use tauri::State;
+
+#[tauri::command]
+async fn api_operation(
+    state: State<'_, ApiClientState>,
+    request: ApiRequest
+) -> Result<ApiResponse, String> {
+    let client = state.client.as_ref()
+        .ok_or("No active API client")?;
+    
+    // Perform operation with persistent client state
+}
+```
+
+## Integration Patterns
+
+### MCP Server Integration
+
+**Apstra MCP Server**:
+The application integrates with MCP (Model Context Protocol) servers for enhanced Apstra operations:
+
+```rust
+// MCP integration for advanced Apstra operations
+use mcp_apstra::*;
+
+async fn mcp_apstra_operation() -> Result<(), String> {
+    // Integration with MCP Apstra server for advanced operations
+    // - Blueprint auditing and compliance checking
+    // - Automated configuration management
+    - Network topology analysis
+}
+```
+
+### Service Integration Patterns
+
+**Centralized API Communication**:
+```typescript
+// Unified service pattern for all API operations
+class TauriApiService {
+    static async invokeCommand<T>(
+        command: string, 
+        args?: Record<string, any>,
+        errorContext = 'Command failed'
+    ): Promise<T> {
+        try {
+            return await invoke(command, args);
+        } catch (error) {
+            console.error(`${errorContext}:`, error);
+            throw new Error(`${errorContext}: ${error}`);
+        }
+    }
+}
+```
+
+## Security Considerations
+
+### Authentication Security
+
+**Credential Handling**:
+- Secure credential storage and transmission
+- Session token encryption and secure storage
+- Automatic credential cleanup on logout
+- Protection against credential exposure in logs
+
+**API Security**:
+- Proper authentication headers and error handling
+- Request validation and sanitization
+- Response data validation and type checking
+- Protection against injection attacks
+
+### Network Security
+
+**Communication Security**:
+- HTTPS enforcement for all API communications
+- Certificate validation and trust verification
+- Secure cookie handling for session management
+- Protection against man-in-the-middle attacks
+
+## Performance Optimization
+
+### Caching Strategies
+
+**Response Caching**:
+- Blueprint data caching with invalidation strategies
+- System information caching for improved performance
+- Search result caching with expiration policies
+
+**Connection Pooling**:
+- HTTP client connection reuse
+- Session persistence across operations
+- Efficient resource management
+
+### Asynchronous Operations
+
+**Non-Blocking Operations**:
+```rust
+// Async operation patterns
+async fn parallel_blueprint_operations(blueprint_ids: Vec<String>) -> Result<Vec<BlueprintData>, String> {
+    let futures: Vec<_> = blueprint_ids.into_iter()
+        .map(|id| get_blueprint_data(id))
+        .collect();
+    
+    let results = futures::future::try_join_all(futures).await?;
+    Ok(results)
+}
+```
+
+## Development Best Practices
+
+### API Client Design
+
+**Service Layer Patterns**:
+- Centralized error handling across all API operations
+- Type-safe request/response interfaces
+- Consistent logging and debugging support
+- Standardized retry and recovery mechanisms
+
+### Testing Strategies
+
+**Integration Testing**:
+```rust
+#[tokio::test]
+async fn test_apstra_api_integration() {
+    // Integration tests with mock Apstra server
+    let mock_server = create_mock_apstra_server().await;
+    let client = ApstraApiClient::new(mock_server.url());
+    
+    let result = client.login("test_user", "test_pass").await;
+    assert!(result.is_ok());
+    
+    // Additional API operation tests
+}
+```
+
+### Configuration Management
+
+**Environment-Based Configuration**:
+```rust
+// Configuration management for different environments
+#[derive(Debug, serde::Deserialize)]
+pub struct ApstraConfig {
+    pub default_timeout: u64,
+    pub max_retries: u32,
+    pub connection_pool_size: usize,
+    pub enable_debug_logging: bool,
+}
+
+impl ApstraConfig {
+    pub fn from_env() -> Result<Self, String> {
+        // Load configuration from environment variables
+    }
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Authentication Problems**:
+- Verify Apstra controller URL format and accessibility
+- Check username/password credentials
+- Validate SSL certificate trust
+- Review session timeout configuration
+
+**API Integration Issues**:
+- Verify Apstra session authentication: Check for `401 Unauthorized` responses
+- Test API connectivity: Use debug logs to trace API call failures
+- Session timeout handling: Implement automatic re-authentication on session expiry
+- MCP server integration: Ensure proper MCP server configuration for Apstra API calls
+
+**Performance Issues**:
+- Monitor API response times and implement caching
+- Review connection pooling configuration
+- Optimize large data transfers with pagination
+- Implement request batching for bulk operations
+
+### Debug Logging
+
+**Comprehensive Logging**:
+```rust
+// Detailed API operation logging
+log::debug!("Apstra API request: {} {}", method, url);
+log::debug!("Request headers: {:?}", headers);
+log::debug!("Request body: {}", request_body);
+log::debug!("Response status: {}", response.status());
+log::debug!("Response body: {}", response_body);
+```
+
+**Frontend Debugging**:
+```typescript
+// Client-side API debugging
+console.group(`Apstra API: ${operation}`);
+console.log('Request:', request);
+console.log('Response:', response);
+console.groupEnd();
+```
