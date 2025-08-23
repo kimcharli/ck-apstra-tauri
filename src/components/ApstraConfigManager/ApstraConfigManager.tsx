@@ -150,7 +150,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
       }));
 
       console.log('Successfully authenticated with Apstra.');
-      alert('Successfully connected to Apstra! You can now use the Tools page.');
       
     } catch (error: any) {
       console.error('Authentication failed:', error);
@@ -159,7 +158,6 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
         connectionStatus: 'failed',
         validationErrors: [`Authentication failed: ${error.message || error}`]
       }));
-      alert(`Failed to connect to Apstra: ${error.message || error}`);
     } finally {
       setIsConnecting(false);
     }

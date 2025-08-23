@@ -182,7 +182,12 @@ let merge_enabled_columns: std::collections::HashSet<&str> = [
 
 **Data Integrity Rules**:
 - **Interface-Level Duplicate Prevention**: Skip adding connections that already exist with identical switch_label, server_label, and switch_ifname combination. If a server has additional interfaces connected to other switch interfaces not present in the Excel data, those new interface connections should be added to the provisioning table
-- **Blueprint-Only Connection Identification**: Mark newly added interface connections with visual indicator 'Only in Blueprint' to distinguish from Excel-sourced data
+- **Blueprint-Only Connection Discovery**: **CRITICAL FEATURE** - Automatically discover and add network connections that exist in Apstra Blueprint but are missing from Excel input:
+  - **Discovery Process**: After API query, identify connections present in Blueprint but not in Excel data
+  - **Automatic Addition**: Add missing connections as new rows in provisioning table
+  - **Visual Identification**: Mark with `comment: 'Only in Blueprint'` and blue highlighting with italic text
+  - **Use Case**: Captures real network topology that may not be documented in Excel spreadsheets
+  - **Example**: Server connected to multiple switches, but Excel only shows one connection - missing connections automatically added
 - **Multi-Interface Server Support**: Allow multiple rows for the same server when connected via different interfaces, ensuring complete connectivity representation
 - **Required Field Validation**: Only add new rows with complete switch_label and server_label
 - **Blueprint Consistency**: New rows inherit the blueprint context from the current query

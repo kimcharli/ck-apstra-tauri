@@ -189,17 +189,26 @@ export class ApstraApiService {
   }
 
   /**
-   * Query all connectivity in a blueprint to compare with provisioning table
+   * Query connectivity in a blueprint to compare with provisioning table
+   * Optimized to filter by specific switch labels present in the table data
    */
-  public async queryConnectivity(blueprintId: string): Promise<QueryResponse> {
+  public async queryConnectivity(blueprintId: string, switchLabels?: string[]): Promise<QueryResponse> {
     if (!this.isAuthenticated) {
       throw new Error('Not authenticated. Please login first.');
     }
 
+    // Build switch filter clause for optimization
+    let switchFilter = '';
+    if (switchLabels && switchLabels.length > 0) {
+      const labelsList = switchLabels.map(label => `'${label}'`).join(', ');
+      switchFilter = `, label=is_in([${labelsList}])`;
+    }
+
     // Complex graph query to get switch-to-server connectivity information
+    // Optimized to filter switches at query level using is_in() function
     const connectivityQuery = `
       match(
-        node('system', system_type='switch', name='switch')
+        node('system', system_type='switch'${switchFilter}, name='switch')
          .out('hosted_interfaces').node('interface', if_type='ethernet', name='intf1')
           .out('link').node('link', name='link1')
           .in_('link').node(name='intf2')

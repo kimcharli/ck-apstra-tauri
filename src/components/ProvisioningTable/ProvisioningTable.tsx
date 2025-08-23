@@ -209,10 +209,18 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         return;
       }
 
-      console.log('🔍 Fetching connectivity data from Apstra...', { blueprintId, blueprintName: defaultBlueprintName });
+      // Extract unique switch labels from table data for query optimization
+      const uniqueSwitchLabels = [...new Set(data.map(row => row.switch_label).filter(Boolean))] as string[];
+      
+      console.log('🔍 Fetching connectivity data from Apstra...', { 
+        blueprintId, 
+        blueprintName: defaultBlueprintName,
+        switchLabels: uniqueSwitchLabels,
+        switchCount: uniqueSwitchLabels.length 
+      });
 
-      // Query Apstra for connectivity data
-      const connectivityResponse = await apstraApiService.queryConnectivity(blueprintId);
+      // Query Apstra for connectivity data with switch label filtering for optimization
+      const connectivityResponse = await apstraApiService.queryConnectivity(blueprintId, uniqueSwitchLabels);
       console.log('📊 Connectivity query results:', connectivityResponse);
 
       // Compare the API results with table data and add missing rows
