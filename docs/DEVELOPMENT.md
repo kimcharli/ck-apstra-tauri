@@ -433,6 +433,51 @@ function DataTable({ data }: { data?: NetworkConfigRow[] }) {
 - **Performance Issues**: If parsing is slow with large Excel files, merged cell detection runs in O(n*m) time - consider data size limits
 - **Excel Compatibility**: Algorithm works with Excel merged cells that appear as empty DataType::Empty in calamine - verify Excel file structure if issues persist
 
+### Provisioning Table Color Coding Issues
+
+**CRITICAL BUG PATTERN**: Incorrect colors showing despite successful Apstra API query and connection matching.
+
+**Symptoms**:
+- Excel connections show gray "XLSX pending" or orange "field-missing" colors 
+- "Fetch & Compare" reports successful matches in console logs
+- Apstra API query returns correct connection data
+- Connection keys are generated correctly from API results
+
+**Root Cause**: React state management bug where `apiConnectionsMap.delete(connectionKey)` removes matched API data before creating the final `apiDataMap` for React state.
+
+**Debugging Steps**:
+1. **Enable Debug Logging**: Use 📥 log download to capture full debug output
+2. **Verify API Query**: Check logs for "Generated connection key" entries showing correct API data processing
+3. **Verify Excel Matching**: Look for "Match found for Excel row" entries in logs
+4. **Check State Management**: If matches are found but colors are wrong, it's the React state bug
+
+**Critical Code Location**: `src/components/ProvisioningTable/ProvisioningTable.tsx` in `compareAndUpdateConnectivityData()` function.
+
+**The Bug**:
+```typescript
+// WRONG: Deletes API data before creating React state
+apiConnectionsMap.delete(connectionKey); // Line causes the bug
+// Later...
+finalApiDataMap.set(connectionKey, connectionData.rawData); // Data already deleted!
+```
+
+**The Fix**:
+```typescript
+// CORRECT: Create final state map BEFORE any deletions
+const finalApiDataMap = new Map<string, any>();
+[...apiConnectionsMap.entries()].forEach(([key, data]) => {
+  finalApiDataMap.set(key, data.rawData); // Capture ALL data first
+});
+// Now safe to delete for finding extras
+apiConnectionsMap.delete(connectionKey);
+```
+
+**Prevention**:
+- Never delete from data maps before creating final React state
+- Always capture React state data before any destructive operations
+- Use downloadable logs to debug state management issues
+- Test color coding after any changes to data processing logic
+
 ## Regression Prevention Patterns
 
 ### Critical Implementation Patterns
@@ -469,6 +514,7 @@ function DataTable({ data }: { data?: NetworkConfigRow[] }) {
 - ❌ **NEVER** override existing complex interface names
 - ❌ **NEVER** remove speed normalization without updating frontend logic
 - ❌ **NEVER** change frontend regex `/[GM]$/` without testing all speed formats
+- ❌ **NEVER** delete API data from maps before creating final state maps (critical React state bug)
 
 **ALWAYS** Rules for quality:
 - ✅ **ALWAYS** validate both switch name and interface are present

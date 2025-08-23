@@ -172,6 +172,9 @@ export class ApstraApiService {
 
     try {
       const normalizedQuery = ApstraApiService.normalizeQuery(query);
+      
+      // Query details are logged in Rust backend for download via log export
+      
       const result = await invoke<ApiResult<QueryResponse>>('apstra_execute_query', {
         sessionId: this.sessionId,
         blueprintId,

@@ -344,6 +344,63 @@ apiResults.forEach(item => {
 
 **Validation**: Speed data must appear in provisioning table Link Speed column and be properly color-coded for match/mismatch/blueprint-only status.
 
+### CRITICAL: Multi-State Visual Feedback System
+
+**ESSENTIAL IMPLEMENTATION**: The provisioning table provides clear visual feedback about data state through a four-color coding system.
+
+**Visual State System**:
+1. **🔘 XLSX Pending** (Light gray with left border) - Initial Excel data before API comparison
+2. **🟢 Match** (Green) - Excel data matches Apstra API data
+3. **🔴 Mismatch** (Red) - Excel data differs from Apstra API data  
+4. **🟠 Missing** (Orange) - Excel data not found in Apstra
+5. **🔵 Blueprint-only** (Light blue) - Connection exists only in Apstra
+
+**Implementation Details** in `ProvisioningTable.tsx`:
+
+```typescript
+// State determination based on API data availability
+const hasApiDataAvailable = apiDataMap.size > 0; // Check if Fetch & Compare was run
+
+if (hasApiDataAvailable && apiData) {
+  // Post-comparison: Green (match) or Red (mismatch)
+  const hasMatch = fieldMatches[columnKey] || false;
+  baseClass += hasMatch ? ' field-match' : ' field-mismatch';
+} else if (hasApiDataAvailable && !apiData) {
+  // Connection missing from Apstra: Orange
+  baseClass += ' field-missing';
+} else {
+  // Pre-comparison: Light gray pending state
+  baseClass += ' field-xlsx-pending';
+}
+```
+
+**CSS Color Definitions**:
+```css
+.field-xlsx-pending { background-color: #f8f9fa; border-left: 3px solid #dee2e6; }
+.field-match       { background-color: #d4edda; color: #155724; }
+.field-mismatch    { background-color: #f8d7da; color: #721c24; }  
+.field-missing     { background-color: #fff3cd; color: #856404; }
+.blueprint-only    { background-color: #e7f3ff; color: #0c5460; }
+```
+
+**User Experience Flow**:
+1. **Excel Upload**: All data cells show light gray "pending" state
+2. **Fetch & Compare**: Colors transition to show actual comparison results
+3. **Visual Clarity**: Users immediately see which data needs attention
+
+**Comparable Fields**: Applied to `switch_label`, `server_label`, `switch_ifname`, `server_ifname`, `link_speed`, `link_group_lag_mode`, `link_group_ct_names`, `is_external`
+
+**NEVER Rules**:
+- ❌ **NEVER** show comparison colors before API data is available
+- ❌ **NEVER** mix pending state with comparison states  
+- ❌ **NEVER** apply colors to non-comparable fields unnecessarily
+
+**ALWAYS Rules**:
+- ✅ **ALWAYS** show pending state for initial Excel data
+- ✅ **ALWAYS** transition colors after Fetch & Compare operation
+- ✅ **ALWAYS** provide visual distinction between all five states
+- ✅ **ALWAYS** maintain semantic color consistency with filter legend
+
 ## 4.4 Conversion Mapping Architecture
 
 ### System Design

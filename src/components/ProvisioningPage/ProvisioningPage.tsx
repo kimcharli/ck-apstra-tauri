@@ -28,7 +28,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
   const [tableData, setTableData] = useState<NetworkConfigRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [selectedBlueprint, setSelectedBlueprint] = useState<string>('DH4-Colo2');
-  const [activeFilter, setActiveFilter] = useState<'match' | 'mismatch' | 'blueprint' | 'ct-not-found'>('match');
+  const [activeFilter, setActiveFilter] = useState<'match' | 'mismatch' | 'blueprint' | 'ct-not-found' | 'xlsx-pending'>('match');
   const [blueprintValidation, setBlueprintValidation] = useState<{found: number, total: number} | null>(null);
 
   const handleSheetsLoaded = (loadedSheets: string[], loadedFilePath: string) => {
@@ -241,6 +241,13 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
               <span className="summary-value">{summary.switches}</span>
             </div>
             <div className="filter-tabs">
+              <button 
+                className={`filter-tab ${activeFilter === 'xlsx-pending' ? 'active' : ''}`}
+                data-filter="xlsx-pending"
+                onClick={() => setActiveFilter('xlsx-pending')}
+              >
+                XLSX Pending
+              </button>
               <button 
                 className={`filter-tab ${activeFilter === 'match' ? 'active' : ''}`}
                 data-filter="match"

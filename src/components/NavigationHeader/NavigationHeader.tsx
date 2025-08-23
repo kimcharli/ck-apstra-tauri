@@ -91,7 +91,7 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
           stats: logger.getLogStats()
         });
         
-        alert(`Logs successfully exported to ${filePath}`);
+        // Log exported successfully - no popup needed
       }
     } catch (error: any) {
       console.error('Failed to download logs:', error);

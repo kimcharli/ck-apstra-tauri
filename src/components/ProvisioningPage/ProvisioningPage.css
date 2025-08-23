@@ -205,6 +205,13 @@
   border-color: #bee5eb;
 }
 
+/* XLSX Pending - Always Light Gray (matches table cells) */
+.filter-tab[data-filter="xlsx-pending"] {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  border-color: #dee2e6;
+}
+
 /* CT Not Found - Always Orange/Yellow */
 .filter-tab[data-filter="ct-not-found"] {
   background-color: #ffc107;

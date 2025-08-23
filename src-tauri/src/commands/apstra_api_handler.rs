@@ -139,7 +139,14 @@ pub async fn apstra_execute_query(
     query: String,
     state: State<'_, ApiClientState>,
 ) -> Result<ApiResult<QueryResponse>, String> {
-    log::info!("Executing custom query on blueprint '{}'", blueprint_id);
+    log::warn!("Executing custom query on blueprint '{}'", blueprint_id);
+    log::warn!("=== APSTRA QUERY DEBUG ===");
+    log::warn!("Blueprint ID: {}", blueprint_id);
+    log::warn!("Session ID: {}", session_id);
+    log::warn!("Query String for Analysis/Download:");
+    log::warn!("----------------------------------------");
+    log::warn!("{}", query);
+    log::warn!("----------------------------------------");
     
     let client = {
         let clients = state.lock().map_err(|e| format!("Failed to acquire lock: {}", e))?;
@@ -157,7 +164,19 @@ pub async fn apstra_execute_query(
     
     match client.execute_query(&blueprint_id, &query).await {
         Ok(response) => {
-            log::info!("Custom query completed. Found {} results", response.count);
+            log::warn!("Custom query completed. Found {} results", response.count);
+            log::warn!("Query results summary:");
+            log::warn!("  - Total items: {}", response.items.len());
+            log::warn!("  - Response count: {}", response.count);
+            
+            // Log first few results for debugging (limit to avoid spam)
+            for (i, item) in response.items.iter().take(3).enumerate() {
+                log::warn!("  Result {}: {}", i + 1, serde_json::to_string_pretty(item).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            }
+            if response.items.len() > 3 {
+                log::warn!("  ... and {} more results", response.items.len() - 3);
+            }
+            
             Ok(ApiResult::success(response))
         }
         Err(e) => {

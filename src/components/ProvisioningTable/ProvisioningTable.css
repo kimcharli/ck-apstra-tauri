@@ -130,14 +130,18 @@
 .header-content {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  white-space: nowrap;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  line-height: 1.2;
+  white-space: normal;
 }
 
 .sort-indicator {
-  margin-left: 4px;
+  margin-top: 2px;
   font-weight: bold;
   color: #007bff;
+  font-size: 0.9em;
 }
 
 .select-column {
@@ -209,6 +213,39 @@
 
 .provisioning-table tbody tr:hover .field-match {
   background-color: #c3e6cb;
+}
+
+/* Field mismatch styling - red color for mismatched fields */
+.table-cell.field-mismatch {
+  background-color: #f8d7da;
+  color: #721c24;
+  font-weight: 500;
+}
+
+.provisioning-table tbody tr:hover .field-mismatch {
+  background-color: #f5c6cb;
+}
+
+/* Field missing styling - orange color for fields missing from Apstra */
+.table-cell.field-missing {
+  background-color: #fff3cd;
+  color: #856404;
+  font-weight: 500;
+}
+
+.provisioning-table tbody tr:hover .field-missing {
+  background-color: #ffeaa7;
+}
+
+/* Field XLSX pending styling - light gray for initial Excel state before API comparison */
+.table-cell.field-xlsx-pending {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  border-left: 3px solid #dee2e6;
+}
+
+.provisioning-table tbody tr:hover .field-xlsx-pending {
+  background-color: #e9ecef;
 }
 
 .table-footer {
