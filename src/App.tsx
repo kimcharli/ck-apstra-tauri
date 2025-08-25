@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { ConversionMap, ApstraConfig } from './types';
-import ConversionMapManager from './components/ConversionMapManager/ConversionMapManager';
+import { ApstraConfig } from './types';
+import { EnhancedConversionMap } from './services/EnhancedConversionService';
+import EnhancedConversionMapManager from './components/ConversionMapManager/EnhancedConversionMapManager';
 import ApstraConfigManager from './components/ApstraConfigManager/ApstraConfigManager';
 import ProvisioningPage from './components/ProvisioningPage/ProvisioningPage';
 import ToolsPage from './components/ToolsPage/ToolsPage';
@@ -15,7 +16,7 @@ function AppContent() {
   const { isAuthenticated } = useAuthStatus();
   
   // Configuration states
-  const [conversionMap, setConversionMap] = useState<ConversionMap | null>(null);
+  const [conversionMap, setConversionMap] = useState<EnhancedConversionMap | null>(null);
   const [apstraConfig, setApstraConfig] = useState<ApstraConfig | null>(null);
   
   // UI state management
@@ -60,15 +61,17 @@ function AppContent() {
     }
   };
 
-  const handleConversionMapChange = (newMap: ConversionMap) => {
+  const handleConversionMapChange = (newMap: EnhancedConversionMap) => {
     const oldMap = conversionMap;
     setConversionMap(newMap);
-    logger.logDataChange('ConversionMap', 'updated', oldMap, newMap);
-    logger.logInfo('DATA_CHANGE', 'Conversion map updated in main app', { 
-      mappingCount: Object.keys(newMap.mappings || {}).length,
-      headerRow: newMap.header_row 
+    logger.logDataChange('EnhancedConversionMap', 'updated', oldMap, newMap);
+    logger.logInfo('DATA_CHANGE', 'Enhanced conversion map updated in main app', { 
+      fieldDefinitionCount: Object.keys(newMap.field_definitions || {}).length,
+      transformationRuleCount: Object.keys(newMap.transformation_rules || {}).length,
+      headerRow: newMap.header_row,
+      version: newMap.version
     });
-    console.log('App: Conversion map updated:', newMap);
+    console.log('App: Enhanced conversion map updated:', newMap);
   };
 
   const handleApstraConfigChange = (newConfig: ApstraConfig) => {
@@ -357,7 +360,7 @@ function AppContent() {
         </section>
       </main>
       
-      <ConversionMapManager
+      <EnhancedConversionMapManager
         isVisible={showConversionManager}
         onClose={() => setShowConversionManager(false)}
         onNavigate={handleNavigation}

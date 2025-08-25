@@ -407,6 +407,163 @@ function DataTable({ data }: { data?: NetworkConfigRow[] }) {
 
 ## Troubleshooting Common Issues
 
+### Tauri Parameter Naming Convention Issue
+
+**CRITICAL FINDING**: Tauri expects camelCase parameter names in frontend invoke calls, not snake_case.
+
+**Symptoms**:
+- Error: "invalid args \`filePath\` for command \`upload_excel_file\`: command upload_excel_file missing required key filePath"
+- Frontend sends correct JSON but backend rejects parameters
+- Parameter values are correct but naming convention causes mismatch
+
+**Root Cause**: Parameter naming convention mismatch between frontend and backend expectations.
+
+**Solution**:
+```rust
+// Backend Rust: Use camelCase in function parameters
+#[command]
+pub async fn upload_excel_file(filePath: String) -> Result<Vec<String>, String> {
+    let file_path = filePath; // Convert to snake_case for internal use
+    // ... rest of function
+}
+```
+
+```typescript
+// Frontend TypeScript: Use camelCase in invoke calls
+const sheets = await invoke<string[]>('upload_excel_file', { filePath });
+```
+
+**Key Points**:
+- Keep camelCase throughout the entire frontend-backend parameter flow
+- Rust will warn about non-snake_case variable names, but this is expected for Tauri commands
+- Convert to snake_case inside Rust functions for internal consistency
+- Both frontend parameter object and Rust function parameter must use same camelCase naming
+
+**Prevention**:
+- Always use camelCase for Tauri command parameters
+- Test parameter passing immediately when adding new Tauri commands
+- Check for "missing required key" errors as indicator of naming mismatch
+
+### React Blank Page Issue
+
+**CRITICAL DEBUGGING**: React application not rendering despite dev server running normally.
+
+**Symptoms**:
+- Tauri dev server starts successfully with `npm run tauri:dev`
+- HTML serves correctly when tested with `curl http://localhost:1420`
+- Tauri application window shows blank page or loading fallback content
+- Console may show TypeScript compilation errors
+
+**Root Cause**: Silent TypeScript compilation errors prevent React from mounting.
+
+**Common TypeScript Issues**:
+```typescript
+// WRONG: Using type alias as enum value
+<option value={DataType.String}>String</option>
+
+// CORRECT: Using string literals
+<option value="String">String</option>
+
+// WRONG: Async/sync interface mismatch
+getField: (name: string) => FieldDefinition | null;  // Interface
+const getField = async (name: string) => { ... }     // Implementation
+
+// CORRECT: Matching async signatures
+getField: (name: string) => Promise<FieldDefinition | null>;
+```
+
+**Debugging Steps**:
+1. **Check TypeScript Compilation**: `npm run lint` - Fix ALL errors before testing
+2. **Test in Actual Context**: Don't rely on `curl` (shows static HTML only)
+3. **Check Browser Console**: Look for JavaScript runtime errors
+4. **Verify React Mounting**: Look for "✅ React Mounted Successfully" indicator
+
+**Prevention**:
+- Always run `npm run lint` before assuming React issues
+- Use fallback content in `index.html` to detect mounting failures
+- Add console logging and visual indicators for React lifecycle events
+
+**Quick Fix Workflow**:
+```bash
+npm run lint              # Identify TypeScript errors
+# Fix all compilation errors
+npm run tauri:dev        # Test in actual Tauri app
+```
+
+### Tauri Parameter Naming Convention Issue
+
+**CRITICAL ISSUE**: Frontend-backend parameter mismatch preventing Excel data processing.
+
+**Symptoms**:
+- File upload fails with error: `"invalid args 'filePath' for command 'upload_excel_file': command upload_excel_file missing required key filePath"`
+- Sheet selection fails with error: `"invalid args 'filePath' for command 'parse_excel_sheet': command parse_excel_sheet missing required key filePath"`
+- Excel data doesn't render in provisioning table after sheet selection
+
+**Root Cause**: Tauri expects camelCase parameters from frontend, but backend Rust commands were defined with snake_case parameters.
+
+**Critical Understanding**: 
+- **Frontend TypeScript**: Uses camelCase (`filePath`, `sheetName`, `enhancedConversionMap`)
+- **Tauri IPC**: Expects camelCase parameter names from frontend
+- **Rust Backend**: Should accept camelCase and convert internally to snake_case
+
+**Solution Pattern**:
+```rust
+// CORRECT: Backend accepts camelCase parameters
+#[command]
+pub async fn parse_excel_sheet(
+    filePath: String,                                    // Accept camelCase
+    sheetName: String,                                   // Accept camelCase 
+    enhancedConversionMap: Option<EnhancedConversionMap> // Accept camelCase
+) -> Result<Vec<NetworkConfigRow>, String> {
+    let file_path = filePath;                           // Convert internally
+    let sheet_name = sheetName;                         // Convert internally
+    let enhanced_conversion_map = enhancedConversionMap; // Convert internally
+    // ... rest of implementation uses snake_case
+}
+```
+
+```typescript
+// Frontend uses camelCase consistently
+const parsedData = await invoke<NetworkConfigRow[]>('parse_excel_sheet', { 
+  filePath: filePath,                    // camelCase
+  sheetName: sheetName,                  // camelCase
+  enhancedConversionMap: conversionMap   // camelCase
+});
+```
+
+**Files That Required Updates**:
+- `src-tauri/src/commands/data_parser.rs` - `parse_excel_sheet` function signature
+- `src-tauri/src/commands/file_handler.rs` - `upload_excel_file` function signature
+- `src/components/ProvisioningPage/ProvisioningPage.tsx` - invoke calls
+- `src/components/FileUpload/FileUpload.tsx` - invoke calls
+- `src/components/ConversionMapManager/ConversionMapManager.tsx` - invoke calls
+- `src/services/api.ts` - API service methods
+
+**Prevention**:
+- **ALWAYS** use camelCase for Tauri command parameters in both frontend and backend
+- Convert to snake_case only inside the Rust function implementation
+- Test parameter changes immediately with actual Excel file operations
+- Document parameter naming patterns clearly in command definitions
+
+**Quick Fix Workflow**:
+```bash
+# 1. Update backend command signatures to camelCase
+# 2. Ensure frontend invoke calls use camelCase
+# 3. Clear development cache if needed
+rm -rf dist && rm -rf node_modules/.vite
+# 4. Restart development server
+RUST_LOG=debug npm run tauri:dev
+# 5. Test with actual Excel file upload and sheet selection
+```
+
+**Testing Commands**:
+```bash
+# Backend compilation check
+cargo check
+# Test critical Excel parsing functionality
+cargo test test_port_field_mapping_regression -- --nocapture
+```
+
 ### Excel Data Not Displaying
 - Check debug logs with `RUST_LOG=debug npm run tauri:dev`
 - Verify conversion map is loading: Look for "Using default conversion map with X mappings"

@@ -1,5 +1,5 @@
 use ck_apstra_tauri::commands::data_parser::parse_excel_sheet;
-use ck_apstra_tauri::services::conversion_service::ConversionService;
+use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
 use std::path::Path;
 
 #[tokio::test]
@@ -13,8 +13,8 @@ async fn test_port_field_mapping_regression() {
         panic!("Test file not found: {:?}", test_file);
     }
 
-    // Use default conversion map which has "Port" -> "switch_ifname"
-    let conversion_map = ConversionService::load_default_conversion_map().ok();
+    // Use default enhanced conversion map which has "Port" -> "switch_ifname"
+    let conversion_map = EnhancedConversionService::load_default_enhanced_conversion_map().ok();
     
     let result = parse_excel_sheet(
         test_file.to_string_lossy().to_string(),
@@ -30,6 +30,13 @@ async fn test_port_field_mapping_regression() {
                 .collect();
             
             assert!(!data_rows.is_empty(), "Should have parsed some data rows");
+            
+            // Debug output to see what data we actually have
+            println!("📊 Parsed {} data rows", data_rows.len());
+            for (i, row) in data_rows.iter().take(5).enumerate() {
+                println!("  Row {}: switch_label={:?}, switch_ifname={:?}, server_label={:?}", 
+                    i, row.switch_label, row.switch_ifname, row.server_label);
+            }
             
             // Check that NO rows have "Access" in switch_ifname (regression check)
             let access_rows: Vec<_> = data_rows.iter()

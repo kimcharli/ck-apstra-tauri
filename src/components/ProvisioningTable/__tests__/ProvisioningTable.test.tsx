@@ -344,7 +344,7 @@ describe('ProvisioningTable', () => {
 
       // Selection should be maintained (though row order might change)
       const checkboxes = screen.getAllByRole('checkbox');
-      const selectedCount = checkboxes.filter(cb => cb.checked && cb !== screen.getByTitle('Select all visible rows')).length;
+      const selectedCount = checkboxes.filter(cb => (cb as HTMLInputElement).checked && cb !== screen.getByTitle('Select all visible rows')).length;
       expect(selectedCount).toBe(1);
     });
 

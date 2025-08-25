@@ -261,7 +261,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     // Create a map of API data with interface-level keys and merge multiple chunks
     const apiConnectionsMap = new Map<string, any>();
     
-    apiResults.forEach((item, index) => {
+    apiResults.forEach((item) => {
       // Extract switch and server information from API result
       const switchName = item.switch?.label || item.switch?.hostname;
       const serverName = item.server?.label || item.server?.hostname;
@@ -331,7 +331,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     });
 
     // Check each table row against API data
-    tableData.forEach((row, rowIndex) => {
+    tableData.forEach((row) => {
       const switchName = row.switch_label;
       const serverName = row.server_label;
       const switchInterface = row.switch_ifname;
@@ -492,13 +492,13 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     };
   };
 
-  // Helper function to check if a specific field matches API data
-  const hasFieldMatch = (row: NetworkConfigRow, columnKey: string): boolean => {
-    const apiData = getServerApiData(row);
-    const fieldMatches = compareFields(row, apiData);
-    
-    return fieldMatches[columnKey as keyof typeof fieldMatches] || false;
-  };
+  // Helper function to check if a specific field matches API data (currently unused but kept for potential future use)
+  // const hasFieldMatch = (row: NetworkConfigRow, columnKey: string): boolean => {
+  //   const apiData = getServerApiData(row);
+  //   const fieldMatches = compareFields(row, apiData);
+  //   
+  //   return fieldMatches[columnKey as keyof typeof fieldMatches] || false;
+  // };
 
   // Helper function to get server data from API results (for rendering as button)
   const getServerApiData = (row: NetworkConfigRow): any | null => {

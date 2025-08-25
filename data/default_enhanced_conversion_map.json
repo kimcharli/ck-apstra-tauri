@@ -1,0 +1,587 @@
+{
+  "version": "1.0.0",
+  "header_row": 2,
+  "created_at": "2024-01-15T00:00:00Z",
+  "updated_at": "2024-01-15T00:00:00Z",
+  "field_definitions": {
+    "server_label": {
+      "display_name": "Server Name",
+      "description": "Server or device name",
+      "data_type": "string",
+      "is_required": true,
+      "is_key_field": true,
+      "xlsx_mappings": [
+        {
+          "pattern": "Host Name",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Server",
+          "mapping_type": "exact",
+          "priority": 90,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)server.*name|host.*name|device.*name",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.label",
+          "fallback_paths": ["$.name", "$.hostname"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "min_length": 1,
+        "max_length": 255
+      },
+      "ui_config": {
+        "column_width": 180,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "switch_label": {
+      "display_name": "Switch Name",
+      "description": "Network switch name",
+      "data_type": "string",
+      "is_required": true,
+      "is_key_field": true,
+      "xlsx_mappings": [
+        {
+          "pattern": "Switch",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Switch Name",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)switch.*name",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.switch.label",
+          "fallback_paths": ["$.switch.name", "$.device.name"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "min_length": 1,
+        "max_length": 255
+      },
+      "ui_config": {
+        "column_width": 180,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "switch_ifname": {
+      "display_name": "Switch Interface",
+      "description": "Switch interface name or port number",
+      "data_type": "string",
+      "is_required": true,
+      "is_key_field": true,
+      "xlsx_mappings": [
+        {
+          "pattern": "Port",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Switch Interface",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)switch.*port|switch.*interface",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.interface.name",
+          "fallback_paths": ["$.port.name", "$.interface.label"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "min_length": 1,
+        "max_length": 50
+      },
+      "ui_config": {
+        "column_width": 150,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      },
+      "transformations": ["generate_interface_name"]
+    },
+    "server_ifname": {
+      "display_name": "Server Interface",
+      "description": "Server interface name",
+      "data_type": "string",
+      "is_required": true,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Slot/Port",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Server Interface",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)server.*port|server.*interface|slot.*port",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.server_interface.name",
+          "fallback_paths": ["$.server_port.name"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "min_length": 1,
+        "max_length": 50
+      },
+      "ui_config": {
+        "column_width": 150,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "link_speed": {
+      "display_name": "Link Speed",
+      "description": "Network link speed",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Speed",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Link Speed",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)speed|bandwidth",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.link.speed",
+          "fallback_paths": ["$.speed", "$.bandwidth"],
+          "transformation": "normalize_speed"
+        }
+      ],
+      "validation_rules": {
+        "pattern": "^(\\d+[GM]?|\\d+\\s*(Gbps|Mbps|GB|MB))$"
+      },
+      "ui_config": {
+        "column_width": 120,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      },
+      "transformations": ["normalize_speed"]
+    },
+    "link_group_lag_mode": {
+      "display_name": "LAG Mode",
+      "description": "Link aggregation mode",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "LAG Mode",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)lag.*mode|aggregation.*mode",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.lag.mode",
+          "fallback_paths": ["$.aggregation.mode"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "allowed_values": ["lacp", "static", "none"]
+      },
+      "ui_config": {
+        "column_width": 120,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "link_group_ct_names": {
+      "display_name": "Connectivity Templates",
+      "description": "Connectivity template names",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "CTs",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Connectivity Templates",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)ct.*name|connectivity.*template",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.connectivity_templates[*].name",
+          "fallback_paths": ["$.ct_names"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {},
+      "ui_config": {
+        "column_width": 200,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "link_group_ifname": {
+      "display_name": "AE Interface",
+      "description": "Aggregated ethernet interface name",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "AE",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "AE Interface",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)ae.*interface|aggregated.*ethernet",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.ae_interface.name",
+          "fallback_paths": ["$.lag_interface.name"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "pattern": "^ae\\d+$"
+      },
+      "ui_config": {
+        "column_width": 120,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "is_external": {
+      "display_name": "External",
+      "description": "Whether the connection is external",
+      "data_type": "boolean",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "External",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)external|outside",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.is_external",
+          "fallback_paths": ["$.external"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "allowed_values": ["true", "false", "yes", "no", "1", "0"]
+      },
+      "ui_config": {
+        "column_width": 100,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "server_tags": {
+      "display_name": "Server Tags",
+      "description": "Tags for the server",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Server Tags",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)server.*tag",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.server.tags[*]",
+          "fallback_paths": ["$.tags"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {},
+      "ui_config": {
+        "column_width": 150,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "switch_tags": {
+      "display_name": "Switch Tags",
+      "description": "Tags for the switch",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Switch Tags",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)switch.*tag",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.switch.tags[*]",
+          "fallback_paths": ["$.tags"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {},
+      "ui_config": {
+        "column_width": 150,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "link_tags": {
+      "display_name": "Link Tags",
+      "description": "Tags for the link",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Link Tags",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)link.*tag",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.link.tags[*]",
+          "fallback_paths": ["$.tags"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {},
+      "ui_config": {
+        "column_width": 150,
+        "sortable": true,
+        "filterable": true,
+        "hidden": false
+      }
+    },
+    "comment": {
+      "display_name": "Comment",
+      "description": "Additional comments or notes",
+      "data_type": "string",
+      "is_required": false,
+      "is_key_field": false,
+      "xlsx_mappings": [
+        {
+          "pattern": "Comment",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "Notes",
+          "mapping_type": "exact",
+          "priority": 90,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)comment|note|remark",
+          "mapping_type": "regex",
+          "priority": 80,
+          "case_sensitive": false
+        }
+      ],
+      "api_mappings": [
+        {
+          "primary_path": "$.comment",
+          "fallback_paths": ["$.notes", "$.description"],
+          "transformation": null
+        }
+      ],
+      "validation_rules": {
+        "max_length": 1000
+      },
+      "ui_config": {
+        "column_width": 200,
+        "sortable": false,
+        "filterable": true,
+        "hidden": false
+      }
+    }
+  },
+  "transformation_rules": {
+    "generate_interface_name": {
+      "name": "Generate Interface Name",
+      "description": "Generate interface name based on port number and speed",
+      "rule_type": "dynamic",
+      "conditions": {
+        "input_type": "numeric_port",
+        "has_speed_data": true
+      },
+      "logic": {
+        "Function": "generate_interface_name"
+      },
+      "priority": 100
+    },
+    "normalize_speed": {
+      "name": "Normalize Speed",
+      "description": "Normalize speed values to standard format",
+      "rule_type": "dynamic",
+      "conditions": null,
+      "logic": {
+        "Function": "normalize_speed"
+      },
+      "priority": 80
+    },
+    "boolean_conversion": {
+      "name": "Boolean Conversion",
+      "description": "Convert various boolean representations to true/false",
+      "rule_type": "dynamic",
+      "conditions": null,
+      "logic": {
+        "yes": "true",
+        "no": "false",
+        "1": "true",
+        "0": "false",
+        "Y": "true",
+        "N": "false",
+        "TRUE": "true",
+        "FALSE": "false"
+      },
+      "priority": 60
+    },
+    "trim_and_clean": {
+      "name": "Trim and Clean",
+      "description": "Remove extra whitespace and clean text",
+      "rule_type": "dynamic",
+      "conditions": null,
+      "logic": {
+        "Function": "trim_whitespace"
+      },
+      "priority": 40
+    }
+  }
+}

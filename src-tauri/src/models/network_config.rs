@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NetworkConfigRow {
     pub blueprint: Option<String>,
     pub server_label: Option<String>,
@@ -18,23 +19,3 @@ pub struct NetworkConfigRow {
     pub comment: Option<String>,
 }
 
-impl Default for NetworkConfigRow {
-    fn default() -> Self {
-        Self {
-            blueprint: None,
-            server_label: None,
-            is_external: None,
-            server_tags: None,
-            link_group_ifname: None,
-            link_group_lag_mode: None,
-            link_group_ct_names: None,
-            link_group_tags: None,
-            link_speed: None,
-            server_ifname: None,
-            switch_label: None,
-            switch_ifname: None,
-            link_tags: None,
-            comment: None,
-        }
-    }
-}

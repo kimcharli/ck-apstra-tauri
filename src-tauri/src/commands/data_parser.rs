@@ -2,40 +2,10 @@ use tauri::command;
 use crate::models::network_config::NetworkConfigRow;
 use crate::models::enhanced_conversion_map::EnhancedConversionMap;
 use crate::services::enhanced_conversion_service::EnhancedConversionService;
-use crate::commands::send_backend_log;
 use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 use std::collections::HashMap;
 
-// Helper function to log to both Rust logging and frontend LoggingService
-async fn log_debug_to_frontend(message: &str, details: Option<serde_json::Value>) {
-    // Log to Rust console
-    log::debug!("{}", message);
-    
-    // Also send to frontend logging service
-    if let Err(e) = send_backend_log("debug".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
-        log::warn!("Failed to send log to frontend: {}", e);
-    }
-}
-
-async fn log_info_to_frontend(message: &str, details: Option<serde_json::Value>) {
-    // Log to Rust console
-    log::info!("{}", message);
-    
-    // Also send to frontend logging service
-    if let Err(e) = send_backend_log("info".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
-        log::warn!("Failed to send log to frontend: {}", e);
-    }
-}
-
-async fn log_warn_to_frontend(message: &str, details: Option<serde_json::Value>) {
-    // Log to Rust console
-    log::warn!("{}", message);
-    
-    // Also send to frontend logging service
-    if let Err(e) = send_backend_log("warn".to_string(), "EXCEL_PARSING".to_string(), message.to_string(), details).await {
-        log::warn!("Failed to send log to frontend: {}", e);
-    }
-}
+// Dead code removed - unused logging functions
 
 #[command]
 pub async fn parse_excel_sheet(filePath: String, sheetName: String, enhancedConversionMap: Option<EnhancedConversionMap>) -> Result<Vec<NetworkConfigRow>, String> {

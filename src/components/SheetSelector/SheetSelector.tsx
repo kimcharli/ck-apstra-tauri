@@ -10,7 +10,6 @@ interface SheetSelectorProps {
 
 const SheetSelector: React.FC<SheetSelectorProps> = ({ 
   sheets, 
-  filePath, 
   onSheetSelect,
   selectedSheet 
 }) => {

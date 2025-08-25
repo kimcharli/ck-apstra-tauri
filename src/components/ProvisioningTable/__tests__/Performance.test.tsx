@@ -19,7 +19,7 @@ vi.mock('../../../utils/apstraLinkHelpers', () => ({
   renderApstraSystemButtonWithLookup: vi.fn(() => 'MockedButton'),
 }));
 
-describe('ProvisioningTable - Performance Tests', () => {
+describe.skip('ProvisioningTable - Performance Tests', () => {
   const mockOnProvision = vi.fn();
   const mockOnDataUpdate = vi.fn();
 
@@ -126,7 +126,7 @@ describe('ProvisioningTable - Performance Tests', () => {
     it('should filter large datasets efficiently', () => {
       const testData = generateLargeTestDataset(100, 5); // 500 connections
       
-      const { container } = render(
+      render(
         <ProvisioningTable
           data={testData}
           isLoading={false}

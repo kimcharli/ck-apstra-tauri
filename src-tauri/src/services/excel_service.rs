@@ -2,6 +2,12 @@ use crate::models::network_config::NetworkConfigRow;
 
 pub struct ExcelService;
 
+impl Default for ExcelService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExcelService {
     pub fn new() -> Self {
         Self

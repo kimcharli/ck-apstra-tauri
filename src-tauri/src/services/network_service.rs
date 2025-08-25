@@ -2,6 +2,12 @@ use crate::models::{network_config::NetworkConfigRow, processing_result::Process
 
 pub struct NetworkService;
 
+impl Default for NetworkService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkService {
     pub fn new() -> Self {
         Self

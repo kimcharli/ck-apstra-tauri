@@ -156,3 +156,6 @@ use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 - Fixed server name regression in selective merge detection
 
 For detailed implementation patterns, troubleshooting, and development practices, see the modular documentation in `docs/`.
+
+- implement test in early phase to detect blank page and the DOM error that can cause blank page
+- the provisiong should render the xlsx input data when the sheet is selected. If Apstra Connection is made, the blueprint selection should be made. Otherwise, just render the xlsx input data.

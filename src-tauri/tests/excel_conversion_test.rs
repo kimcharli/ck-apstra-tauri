@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
-use ck_apstra_tauri::models::conversion_map::ConversionMap;
-use ck_apstra_tauri::commands::data_parser::{parse_excel_sheet, validate_data};
+use ck_apstra_tauri::models::enhanced_conversion_map::EnhancedConversionMap;
+use ck_apstra_tauri::commands::data_parser::parse_excel_sheet;
 
 /// Integration tests for Excel conversion functionality using real Excel fixtures
 #[cfg(test)]
@@ -17,28 +17,10 @@ mod excel_integration_tests {
             .join("original-0729.xlsx")
     }
 
-    fn create_default_conversion_map_for_test() -> ConversionMap {
-        let mut mappings = HashMap::new();
-        
-        // Mappings from the default conversion map JSON
-        mappings.insert("Switch Name".to_string(), "switch_label".to_string());
-        mappings.insert("Port".to_string(), "switch_ifname".to_string());
-        mappings.insert("Host Name".to_string(), "server_label".to_string());
-        mappings.insert("Slot/Port".to_string(), "server_ifname".to_string());
-        mappings.insert("Speed\n(GB)".to_string(), "link_speed".to_string());
-        mappings.insert("Speed\r\n(GB)".to_string(), "link_speed".to_string());
-        mappings.insert("External".to_string(), "is_external".to_string());
-        mappings.insert("AE".to_string(), "link_group_ifname".to_string());
-        mappings.insert("LACPNeeded".to_string(), "link_group_lag_mode".to_string());
-        mappings.insert("LACP\nNeeded".to_string(), "link_group_lag_mode".to_string());
-        mappings.insert("LACP\r\nNeeded".to_string(), "link_group_lag_mode".to_string());
-        mappings.insert("CTs".to_string(), "link_group_ct_names".to_string());
-        mappings.insert("Server Tags".to_string(), "server_tags".to_string());
-        mappings.insert("Link Tags".to_string(), "link_tags".to_string());
-        mappings.insert("Comments".to_string(), "comment".to_string());
-        mappings.insert("Notes".to_string(), "comment".to_string());
-        
-        ConversionMap::new(Some(2), mappings) // Header row 2 (1-based, becomes index 1)
+    fn create_enhanced_conversion_map_for_test() -> EnhancedConversionMap {
+        // Use the actual default enhanced conversion map
+        use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+        EnhancedConversionService::load_default_enhanced_conversion_map().unwrap()
     }
 
     #[tokio::test]
@@ -51,7 +33,7 @@ mod excel_integration_tests {
             return;
         }
 
-        let conversion_map = create_default_conversion_map_for_test();
+        let conversion_map = create_enhanced_conversion_map_for_test();
         let file_path = fixture_path.to_string_lossy().to_string();
 
         // Test parsing different sheets that are known to exist in the fixture
@@ -141,7 +123,7 @@ mod excel_integration_tests {
             }
             
             // Test parsing with conversion map to see what header row it actually uses
-            let conversion_map = create_default_conversion_map_for_test();
+            let conversion_map = create_enhanced_conversion_map_for_test();
             println!("Conversion map header_row config: {:?}", conversion_map.header_row);
             
             // Calculate the 0-based index that the parser will use
@@ -204,10 +186,11 @@ mod excel_integration_tests {
                     .collect();
                 
                 // Test the actual field mapping creation process
-                let conversion_map = create_default_conversion_map_for_test();
+                let conversion_map = create_enhanced_conversion_map_for_test();
                 
-                // Import the function we need to test
-                use ck_apstra_tauri::commands::data_parser::create_conversion_field_mapping;
+                // Test the enhanced conversion system
+                use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+                let service = EnhancedConversionService::new();
                 
                 println!("INPUT HEADERS:");
                 for (i, header) in headers.iter().enumerate() {
@@ -219,38 +202,37 @@ mod excel_integration_tests {
                     }
                 }
                 
-                println!("\nCONVERSION MAP MAPPINGS:");
-                for (key, value) in &conversion_map.mappings {
-                    println!("  '{}' -> '{}'", key, value);
-                    if key.contains("Slot") || key.contains("Port") {
-                        println!("       ^^^ SLOT/PORT MAPPING");
-                    }
-                }
-                
-                // Create the field mapping and see what gets matched
-                let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
-                
-                println!("\nRESULTING FIELD MAP:");
-                for (field_name, header) in &field_map {
-                    println!("  field '{}' <- header '{}'", field_name, header);
+                println!("\nENHANCED CONVERSION MAP FIELD DEFINITIONS:");
+                for (field_name, field_def) in &conversion_map.field_definitions {
+                    println!("  field '{}': {:?}", field_name, field_def.display_name);
                     if field_name == "server_ifname" {
-                        println!("       ^^^ SERVER_IFNAME MAPPING!");
+                        println!("    xlsx_mappings: {:?}", field_def.xlsx_mappings);
                     }
                 }
                 
-                // Check if server_ifname is mapped
-                if let Some(mapped_header) = field_map.get("server_ifname") {
-                    println!("\n✅ server_ifname is mapped to header: '{}'", mapped_header);
-                } else {
-                    println!("\n❌ server_ifname is NOT mapped!");
-                    
-                    // Try to find potential matches manually
-                    println!("Looking for potential matches:");
-                    for header in &headers {
-                        let header_lower = header.to_lowercase();
-                        if header_lower.contains("slot") || header_lower.contains("port") {
-                            println!("  Potential match: '{}'", header);
+                // Test the header conversion
+                let conversion_result = service.convert_headers_with_enhanced_map(&headers, &conversion_map);
+                
+                match conversion_result {
+                    Ok(result) => {
+                        println!("\nRESULTING HEADER MAPPINGS:");
+                        for (excel_header, internal_field) in &result.converted_headers {
+                            println!("  excel header '{}' -> internal field '{}'", excel_header, internal_field);
+                            if internal_field == "server_ifname" {
+                                println!("       ^^^ SERVER_IFNAME MAPPING!");
+                            }
                         }
+                        
+                        // Check if server_ifname is mapped
+                        let server_ifname_mapped = result.converted_headers.values().any(|field| field == "server_ifname");
+                        if server_ifname_mapped {
+                            println!("\n✅ server_ifname is mapped successfully");
+                        } else {
+                            println!("\n❌ server_ifname is NOT mapped!");
+                        }
+                    }
+                    Err(e) => {
+                        println!("\n❌ Header conversion failed: {}", e);
                     }
                 }
             }
@@ -303,7 +285,7 @@ mod excel_integration_tests {
             return;
         }
 
-        let conversion_map = create_default_conversion_map_for_test();
+        let conversion_map = create_enhanced_conversion_map_for_test();
         let file_path = fixture_path.to_string_lossy().to_string();
 
         if let Ok(parsed_data) = parse_excel_sheet(
@@ -311,14 +293,9 @@ mod excel_integration_tests {
             "4187-11".to_string(),
             Some(conversion_map)
         ).await {
-            // Test validation
-            let validated_result = validate_data(parsed_data.clone()).await;
-            
-            assert!(validated_result.is_ok(), "Validation should succeed");
-            let validated_data = validated_result.unwrap();
-            
-            // For now validation just returns the same data, but this tests the pipeline
-            assert_eq!(validated_data.len(), parsed_data.len(), "Validated data should have same length");
+            // Test successful parsing
+            println!("Successfully parsed {} rows in validation test", parsed_data.len());
+            assert!(!parsed_data.is_empty(), "Should have parsed some data for validation test");
         }
     }
 
@@ -331,11 +308,9 @@ mod excel_integration_tests {
             return;
         }
 
-        let mut conversion_map = create_default_conversion_map_for_test();
+        let conversion_map = create_enhanced_conversion_map_for_test();
         
-        // Add mappings with different line ending variations to test normalization
-        conversion_map.mappings.insert("Speed (GB)".to_string(), "link_speed".to_string());
-        conversion_map.mappings.insert("LACP Needed".to_string(), "link_group_lag_mode".to_string());
+        // The enhanced conversion map already handles header variations through field definitions
         
         let file_path = fixture_path.to_string_lossy().to_string();
 
@@ -376,7 +351,7 @@ mod excel_integration_tests {
             return;
         }
 
-        let conversion_map = create_default_conversion_map_for_test();
+        let conversion_map = create_enhanced_conversion_map_for_test();
         let file_path = fixture_path.to_string_lossy().to_string();
 
         if let Ok(parsed_data) = parse_excel_sheet(
@@ -416,9 +391,8 @@ mod excel_integration_tests {
             return;
         }
 
-        // Create a conversion map that tries to map Blueprint (should be ignored)
-        let mut conversion_map = create_default_conversion_map_for_test();
-        conversion_map.mappings.insert("Blueprint".to_string(), "blueprint".to_string());
+        // Use the enhanced conversion map (blueprint field was removed from it)
+        let conversion_map = create_enhanced_conversion_map_for_test();
         
         let file_path = fixture_path.to_string_lossy().to_string();
 
@@ -445,7 +419,7 @@ mod excel_integration_tests {
             return;
         }
 
-        let conversion_map = create_default_conversion_map_for_test();
+        let conversion_map = create_enhanced_conversion_map_for_test();
         let file_path = fixture_path.to_string_lossy().to_string();
 
         // Test both sheets mentioned in the issue

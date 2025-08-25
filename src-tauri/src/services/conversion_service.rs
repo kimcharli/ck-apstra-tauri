@@ -5,6 +5,12 @@ use chrono::Utc;
 
 pub struct ConversionService;
 
+impl Default for ConversionService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConversionService {
     pub fn new() -> Self {
         Self

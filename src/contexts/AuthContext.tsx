@@ -130,11 +130,41 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
 
   // Periodic authentication checking
   useEffect(() => {
-    // Initial check
-    checkAuthentication();
+    // Initial check with timeout to prevent UI blocking
+    const performInitialCheck = async () => {
+      try {
+        // Add a timeout to prevent hanging
+        await Promise.race([
+          checkAuthentication(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Authentication check timeout')), 5000)
+          )
+        ]);
+      } catch (error) {
+        console.warn('Initial authentication check failed or timed out:', error);
+        // Set as not authenticated to allow UI to proceed
+        dispatch({ 
+          type: 'SET_AUTHENTICATED', 
+          payload: { authenticated: false } 
+        });
+      }
+    };
     
-    // Set up polling
-    const interval = setInterval(checkAuthentication, pollInterval);
+    performInitialCheck();
+    
+    // Set up polling with error handling
+    const interval = setInterval(async () => {
+      try {
+        await Promise.race([
+          checkAuthentication(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Authentication check timeout')), 10000)
+          )
+        ]);
+      } catch (error) {
+        console.warn('Periodic authentication check failed or timed out:', error);
+      }
+    }, pollInterval);
     
     return () => clearInterval(interval);
   }, [checkAuthentication, pollInterval]);

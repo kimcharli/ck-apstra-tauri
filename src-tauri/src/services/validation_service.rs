@@ -2,6 +2,12 @@ use crate::models::network_config::NetworkConfigRow;
 
 pub struct ValidationService;
 
+impl Default for ValidationService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationService {
     pub fn new() -> Self {
         Self

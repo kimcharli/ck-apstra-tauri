@@ -68,7 +68,7 @@ impl ApstraApiClient {
         
         let response = self
             .client
-            .post(&format!("{}/api/aaa/login", self.base_url))
+            .post(format!("{}/api/aaa/login", self.base_url))
             .json(&login_request)
             .send()
             .await?;
@@ -112,7 +112,7 @@ impl ApstraApiClient {
 
         let response = self
             .client
-            .post(&format!("{}/api/blueprints/{}/qe", self.base_url, blueprint_id))
+            .post(format!("{}/api/blueprints/{}/qe", self.base_url, blueprint_id))
             .header("AuthToken", auth_token)
             .json(&query_request)
             .send()
@@ -174,7 +174,7 @@ impl ApstraApiClient {
 
         let response = self
             .client
-            .get(&format!("{}/api/blueprints/{}", self.base_url, blueprint_id))
+            .get(format!("{}/api/blueprints/{}", self.base_url, blueprint_id))
             .header("AuthToken", auth_token)
             .send()
             .await?;
