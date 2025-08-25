@@ -32,17 +32,15 @@ const FileUpload: React.FC<FileUploadProps> = ({ onSheetsLoaded }) => {
 
       const filePath = selected as string;
 
-      // Process the Excel file and get sheet names
+      // Process the Excel file and get sheet names  
       const sheets = await invoke<string[]>('upload_excel_file', { filePath });
-      
-      console.log('Sheets loaded:', sheets);
       
       if (onSheetsLoaded) {
         onSheetsLoaded(sheets, filePath);
       }
 
     } catch (error) {
-      console.error('Failed to process Excel file:', error);
+      console.error('FileUpload failed:', error);
       setError(error as string);
     } finally {
       setIsLoading(false);

@@ -1,6 +1,7 @@
 use tauri::command;
 use crate::models::network_config::NetworkConfigRow;
-use crate::models::conversion_map::ConversionMap;
+use crate::models::enhanced_conversion_map::EnhancedConversionMap;
+use crate::services::enhanced_conversion_service::EnhancedConversionService;
 use crate::commands::send_backend_log;
 use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 use std::collections::HashMap;
@@ -37,24 +38,26 @@ async fn log_warn_to_frontend(message: &str, details: Option<serde_json::Value>)
 }
 
 #[command]
-pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion_map: Option<ConversionMap>) -> Result<Vec<NetworkConfigRow>, String> {
+pub async fn parse_excel_sheet(filePath: String, sheetName: String, enhancedConversionMap: Option<EnhancedConversionMap>) -> Result<Vec<NetworkConfigRow>, String> {
+    let file_path = filePath; // Convert to snake_case for internal use
+    let sheet_name = sheetName; // Convert to snake_case for internal use
+    let enhanced_conversion_map = enhancedConversionMap; // Convert to snake_case for internal use
     log::info!("Parsing sheet '{}' from file: {}", sheet_name, file_path);
     
-    // Use provided conversion map or load default
-    let effective_conversion_map = if let Some(map) = conversion_map {
-        log::info!("Using provided conversion map with {} mappings", map.mappings.len());
-        Some(map)
+    // Use provided enhanced conversion map or load default
+    let effective_conversion_map = if let Some(map) = enhanced_conversion_map {
+        log::info!("Using provided enhanced conversion map with {} field definitions", map.field_definitions.len());
+        map
     } else {
-        match crate::services::conversion_service::ConversionService::load_default_conversion_map() {
+        match EnhancedConversionService::load_default_enhanced_conversion_map() {
             Ok(default_map) => {
-                log::info!("Using default conversion map with {} mappings, header_row: {:?}", 
-                    default_map.mappings.len(), default_map.header_row);
-                log::debug!("Default mappings: {:?}", default_map.mappings);
-                Some(default_map)
+                log::info!("Using default enhanced conversion map with {} field definitions, header_row: {:?}", 
+                    default_map.field_definitions.len(), default_map.header_row);
+                log::debug!("Default field definitions: {:?}", default_map.field_definitions.keys().collect::<Vec<_>>());
+                default_map
             }
             Err(e) => {
-                log::warn!("Failed to load default conversion map: {}, falling back to built-in logic", e);
-                None
+                return Err(format!("Failed to load enhanced conversion map: {}", e));
             }
         }
     };
@@ -85,8 +88,8 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
     
     log::info!("Sheet dimensions: {}x{}", worksheet.get_size().0, worksheet.get_size().1);
     
-    // Parse the worksheet data with intelligent merged cell handling
-    let parsed_data = parse_worksheet_data(&worksheet, effective_conversion_map.as_ref())?;
+    // Parse the worksheet data with enhanced conversion system
+    let parsed_data = parse_worksheet_data(&worksheet, &effective_conversion_map)?;
     
     log::info!("Parsed {} rows of data", parsed_data.len());
     Ok(parsed_data)
@@ -94,7 +97,7 @@ pub async fn parse_excel_sheet(file_path: String, sheet_name: String, conversion
 
 fn parse_worksheet_data(
     worksheet: &Range<Data>, 
-    conversion_map: Option<&ConversionMap>
+    enhanced_conversion_map: &EnhancedConversionMap
 ) -> Result<Vec<NetworkConfigRow>, String> {
     let mut rows = Vec::new();
     
@@ -105,14 +108,8 @@ fn parse_worksheet_data(
         return Ok(rows);
     }
     
-    // Determine header row index from conversion map or find first non-empty row
-    let header_row_idx = if let Some(conv_map) = conversion_map {
-        (conv_map.header_row.unwrap_or(1).saturating_sub(1)) as usize // Convert 1-based to 0-based
-    } else {
-        worksheet_rows.iter()
-            .position(|row| row.iter().any(|cell| !cell.is_empty()))
-            .unwrap_or(0)
-    };
+    // Determine header row index from enhanced conversion map
+    let header_row_idx = (enhanced_conversion_map.header_row.unwrap_or(1).saturating_sub(1)) as usize; // Convert 1-based to 0-based
     
     if header_row_idx >= worksheet_rows.len() {
         return Ok(rows);
@@ -132,13 +129,13 @@ fn parse_worksheet_data(
         log::debug!("Header[{}]: '{}' (bytes: {:?})", i, header, header.as_bytes());
     }
     
+    // Create field mapping using enhanced conversion system
+    let service = EnhancedConversionService::new();
+    let conversion_result = service.convert_headers_with_enhanced_map(&headers, enhanced_conversion_map)
+        .map_err(|e| format!("Failed to convert headers: {}", e))?;
     
-    // Create field mapping using conversion map or default logic
-    let field_map = if let Some(conv_map) = conversion_map {
-        create_conversion_field_mapping(&headers, &conv_map.mappings)
-    } else {
-        create_field_mapping(&headers)
-    };
+    log::info!("Header conversion successful: {} headers mapped", conversion_result.converted_headers.len());
+    log::debug!("Header mappings: {:?}", conversion_result.converted_headers);
     
     // Process data rows with selective merge detection for specific columns
     // IMPORTANT: The user has mixed cell types:
@@ -155,15 +152,98 @@ fn parse_worksheet_data(
             continue; // Skip empty rows
         }
         
-        // Convert to NetworkConfigRow using field mapping
-        if let Some(network_row) = convert_to_network_config_row(row_data, &field_map) {
-            rows.push(network_row);
-        } else {
-            log::warn!("Skipping row {} due to missing required fields", row_idx + header_row_idx + 2);
+        // Convert row data using enhanced conversion mappings
+        let mut field_data = HashMap::new();
+        for (excel_header, value) in row_data {
+            if let Some(internal_field) = conversion_result.converted_headers.get(excel_header) {
+                field_data.insert(internal_field.clone(), value.clone());
+            }
+        }
+        
+        // Apply field transformations
+        match service.apply_field_transformations(&field_data, enhanced_conversion_map) {
+            Ok(transformed_data) => {
+                // Convert to NetworkConfigRow using enhanced conversion results
+                if let Some(network_row) = convert_enhanced_to_network_config_row(&transformed_data) {
+                    rows.push(network_row);
+                } else {
+                    log::warn!("Skipping row {} due to missing required fields", row_idx + header_row_idx + 2);
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to apply transformations to row {}: {}", row_idx + header_row_idx + 2, e);
+            }
         }
     }
     
     Ok(rows)
+}
+
+/// Converts enhanced field data to NetworkConfigRow
+fn convert_enhanced_to_network_config_row(field_data: &HashMap<String, String>) -> Option<NetworkConfigRow> {
+    // Extract required fields with empty string filtering
+    let switch_label = field_data.get("switch_label")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let raw_switch_ifname = field_data.get("switch_ifname")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    
+    // Both switch name AND interface must be present - this prevents incomplete rows from reaching the provisioning table
+    if switch_label.is_none() || raw_switch_ifname.is_none() {
+        return None;
+    }
+    
+    let server_label = field_data.get("server_label")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let server_ifname = field_data.get("server_ifname")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let link_speed = field_data.get("link_speed")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let link_group_lag_mode = field_data.get("link_group_lag_mode")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let link_group_ct_names = field_data.get("link_group_ct_names")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let link_group_ifname = field_data.get("link_group_ifname")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let server_tags = field_data.get("server_tags")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let link_group_tags = field_data.get("switch_tags")
+        .filter(|s| !s.trim().is_empty())
+        .cloned(); // Map switch_tags to link_group_tags 
+    let link_tags = field_data.get("link_tags")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+    let is_external = field_data.get("is_external")
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|val| val.to_lowercase().parse::<bool>().ok());
+    let comment = field_data.get("comment")
+        .filter(|s| !s.trim().is_empty())
+        .cloned();
+
+    Some(NetworkConfigRow {
+        blueprint: None,
+        server_label,
+        switch_label,
+        switch_ifname: raw_switch_ifname,
+        server_ifname,
+        link_speed,
+        link_group_lag_mode,
+        link_group_ct_names,
+        link_group_ifname,
+        is_external,
+        server_tags,
+        link_group_tags,
+        link_tags,
+        comment,
+    })
 }
 
 /// Propagate merged cell values within a single row
@@ -183,1511 +263,104 @@ fn parse_worksheet_data(
 /// Leading empty cells (before any value) are left as-is.
 fn propagate_merged_cells_in_row(row: &[Data]) -> Vec<Data> {
     let mut result = row.to_vec();
+    let mut current_value: Option<Data> = None;
     
-    // First check if this looks like a header/category row that shouldn't be propagated
-    // Count non-empty cells vs total cells - if too few non-empty cells, it might be a category row
-    let non_empty_count = row.iter().filter(|cell| !cell.is_empty()).count();
-    let total_cells = row.len();
-    
-    // If less than 30% of cells have data and there are many columns, 
-    // this is likely a category/header row that shouldn't be propagated
-    if total_cells > 5 && (non_empty_count as f32 / total_cells as f32) < 0.3 {
-        log::debug!("Row appears to be category/header row ({}/{} non-empty), skipping propagation", 
-                   non_empty_count, total_cells);
-        return result; // Return original row without propagation
-    }
-    
-    let mut last_non_empty_value: Option<Data> = None;
-    let mut propagation_start_index: Option<usize> = None;
-    
-    for i in 0..result.len() {
-        if !result[i].is_empty() {
-            // Found a non-empty cell, use it as the reference value
-            last_non_empty_value = Some(result[i].clone());
-            propagation_start_index = Some(i);
-        } else if let Some(ref value) = last_non_empty_value {
-            if let Some(start_idx) = propagation_start_index {
-                // Only propagate within reasonable distance (max 3-4 cells)
-                // to avoid spreading values too far across the row
-                let distance = i - start_idx;
-                if distance <= 3 {
-                    result[i] = value.clone();
-                    log::trace!("Propagated merged cell value '{}' to position {} (distance: {})", 
-                               value, i, distance);
-                } else {
-                    // Too far from original value, likely a different section
-                    last_non_empty_value = None;
-                    propagation_start_index = None;
-                }
-            }
+    for (i, cell) in row.iter().enumerate() {
+        if !cell.is_empty() {
+            current_value = Some(cell.clone());
+            result[i] = cell.clone();
+        } else if let Some(ref value) = current_value {
+            result[i] = value.clone();
         }
-        // If both current cell is empty AND no previous value, leave it empty
     }
     
     result
 }
 
-/// Apply selective merged cell detection - only to specific columns that actually use merged cells
+/// Apply selective merged cell detection to specific columns that use merged cells.
 /// 
-/// This function handles mixed Excel structures where:
-/// - Some columns have individual values in each row (switch names, ports)
-/// - Some columns have merged cells that should propagate (connectivity templates, server groups)
+/// CRITICAL FEATURE: This function only applies merge detection to columns that 
+/// have been confirmed to use merged cells in Excel files. It preserves individual 
+/// cell values for columns that should remain separate (like switch names and ports).
 /// 
-/// The function identifies which columns should have merge detection applied based on
-/// field names and applies vertical propagation only to those columns.
+/// Currently configured for:
+/// - Connectivity Templates (CTs): Apply vertical merge detection
+/// - Server Names (Host Name): Apply vertical merge detection
+/// 
+/// All other columns are processed as individual cells without merge detection.
 fn apply_selective_merged_cell_detection(
-    data_rows: &[Vec<Data>],
+    data_rows: &[Vec<Data>], 
     headers: &[String]
 ) -> Vec<HashMap<String, String>> {
-    let mut result = Vec::new();
+    let mut processed_rows = Vec::new();
     
     // Define columns that should have merge detection applied
-    // CRITICAL: Only apply merge detection to columns confirmed by user to have merged cells
-    // User confirmed: Connectivity templates have merged cells
-    // REGRESSION FIX: Server names (Host Name) are also in merged cells based on Excel data evidence
     let merge_enabled_columns: std::collections::HashSet<&str> = [
         "CTs",              // Connectivity Templates - USER CONFIRMED: merged cells
-        "link_group_ct_names", // Internal field name for CTs
-        "Host Name",        // Server names - EVIDENCE: Row 3 has "r2lb103960", rows 4-10 empty
+        "link_group_ct_names", // Internal field name for CTs  
+        "Host Name",        // Server names - EVIDENCE: merged cells detected
         "server_label",     // Internal field name for Host Name
-        // NOTE: Switch names and ports confirmed by user as individual cells (no merges)
-        // Do NOT add switch names, ports unless explicitly confirmed
     ].iter().cloned().collect();
     
-    // Initialize carry values only for merge-enabled columns
-    let mut column_carry_values: Vec<Option<String>> = vec![None; headers.len()];
+    log::debug!("Merge-enabled columns: {:?}", merge_enabled_columns);
     
+    // Convert data rows to string format with selective merge detection
     for (row_idx, row) in data_rows.iter().enumerate() {
         let mut row_map = HashMap::new();
         
-        for (col_idx, cell) in row.iter().enumerate() {
-            if col_idx < headers.len() {
-                let header = &headers[col_idx];
-                let value = cell.to_string().trim().to_string();
-                
-                if merge_enabled_columns.contains(header.as_str()) {
-                    // Apply merge logic for this column
-                    if !value.is_empty() {
-                        // Non-empty cell - use value and update carry
-                        column_carry_values[col_idx] = Some(value.clone());
-                        log::trace!("Updated carry value for column '{}' at row {}: '{}'", header, row_idx, value);
-                        row_map.insert(header.clone(), value);
-                    } else {
-                        // Empty cell - use carried value if available
-                        if let Some(ref carried_value) = column_carry_values[col_idx] {
-                            row_map.insert(header.clone(), carried_value.clone());
-                            log::trace!("Applied carry value to column '{}' at row {}: '{}'", header, row_idx, carried_value);
-                        } else {
-                            // No carry value available - leave empty
-                            row_map.insert(header.clone(), value);
-                        }
-                    }
-                } else {
-                    // No merge logic - use cell value as-is
-                    row_map.insert(header.clone(), value);
-                }
-            }
-        }
-        
-        result.push(row_map);
-    }
-    
-    result
-}
-
-/// Convert raw data rows to HashMap without applying any merge logic
-/// 
-/// This function processes Excel rows as-is without attempting to detect or apply
-/// merged cell logic. Each cell is converted directly to its string representation
-/// without any propagation from previous rows or adjacent cells.
-/// 
-/// Use this when your Excel data does not contain merged cells and you want to
-/// preserve the exact structure as entered in the spreadsheet.
-fn convert_raw_data_without_merges(
-    data_rows: &[Vec<Data>],
-    headers: &[String]
-) -> Vec<HashMap<String, String>> {
-    let mut result = Vec::new();
-    
-    for row in data_rows.iter() {
-        let mut row_map = HashMap::new();
-        
-        for (col_idx, cell) in row.iter().enumerate() {
-            if col_idx < headers.len() {
-                let value = cell.to_string().trim().to_string();
-                row_map.insert(headers[col_idx].clone(), value);
-            }
-        }
-        
-        result.push(row_map);
-    }
-    
-    result
-}
-
-/// Apply intelligent merged cell detection to data rows
-/// 
-/// Since we can't access Excel's merged region metadata directly in this calamine version,
-/// we use intelligent heuristics to detect and handle merged cells:
-/// 
-/// 1. **Vertical merges**: Values that should carry down to subsequent rows (common for server names)
-/// 2. **Horizontal merges**: Values that should spread to adjacent empty cells (less common in data)
-/// 3. **Conservative approach**: Only apply merges when patterns are clear and safe
-/// 
-/// The algorithm prioritizes vertical propagation (common in network config data) over 
-/// horizontal propagation to avoid false positives.
-fn apply_intelligent_merged_cell_detection(
-    data_rows: &[Vec<Data>],
-    headers: &[String]
-) -> Vec<HashMap<String, String>> {
-    let mut result = Vec::new();
-    let mut column_carry_values: Vec<Option<String>> = vec![None; headers.len()];
-    
-    for (row_idx, row) in data_rows.iter().enumerate() {
-        // Convert row to string values
-        let mut row_values: Vec<String> = row.iter()
-            .map(|cell| cell.to_string().trim().to_string())
-            .collect();
-        
-        // Apply intelligent merge detection
-        for (col_idx, value) in row_values.iter_mut().enumerate() {
-            if !value.is_empty() {
-                // Non-empty cell - update vertical carry value for future rows
-                column_carry_values[col_idx] = Some(value.clone());
-                log::trace!("Updated carry value for column {} at row {}: '{}'", col_idx, row_idx, value);
+        for (col_idx, header) in headers.iter().enumerate() {
+            let cell_value = if col_idx < row.len() {
+                row[col_idx].to_string()
             } else {
-                // Empty cell - apply vertical merge if available (prioritized for server names)
-                if let Some(ref v_value) = column_carry_values[col_idx] {
-                    *value = v_value.clone();
-                    log::trace!("Applied vertical merge to column {} at row {}: '{}'", col_idx, row_idx, value);
+                String::new()
+            };
+            
+            // Apply merge detection only to designated columns
+            let processed_value = if merge_enabled_columns.contains(header.as_str()) {
+                // For merge-enabled columns, look up for non-empty values
+                if cell_value.trim().is_empty() {
+                    find_merged_cell_value(data_rows, row_idx, col_idx)
+                } else {
+                    cell_value
                 }
-                // Note: We're not applying horizontal merges here to avoid the issues we had
-                // Horizontal merges in network config data are less common and more error-prone
+            } else {
+                // For other columns, use the cell value as-is
+                cell_value
+            };
+            
+            row_map.insert(header.clone(), processed_value.trim().to_string());
+        }
+        
+        processed_rows.push(row_map);
+    }
+    
+    processed_rows
+}
+
+/// Find merged cell value by looking upward in the same column
+/// 
+/// This function implements vertical merge detection by searching upward
+/// in the same column to find the most recent non-empty value.
+/// 
+/// This is specifically designed for columns like "Connectivity Templates"
+/// where a single value spans multiple rows in Excel merged cells.
+fn find_merged_cell_value(data_rows: &[Vec<Data>], current_row: usize, col_idx: usize) -> String {
+    // Look upward for the most recent non-empty value in this column
+    for check_row in (0..current_row).rev() {
+        if let Some(check_cell) = data_rows.get(check_row).and_then(|row| row.get(col_idx)) {
+            let check_value = check_cell.to_string().trim().to_string();
+            if !check_value.is_empty() {
+                log::debug!("Found merged value '{}' for row {} col {} from row {}", 
+                           check_value, current_row, col_idx, check_row);
+                return check_value;
             }
         }
         
-        // Convert to HashMap with headers
-        let mut row_data = HashMap::new();
-        for (col_idx, value) in row_values.iter().enumerate() {
-            let header = headers.get(col_idx).cloned().unwrap_or_else(|| format!("col_{}", col_idx));
-            row_data.insert(header, value.clone());
-        }
-        
-        result.push(row_data);
-    }
-    
-    result
-}
-
-/// Determine if horizontal merge should be applied to a specific column
-/// 
-/// This function helps avoid inappropriate horizontal propagation by checking
-/// if the horizontal merge seems like a legitimate Excel merged cell pattern.
-fn should_apply_horizontal_merge(row_with_horizontal: &[Data], col_idx: usize) -> bool {
-    // For now, use the same logic as the original propagate_merged_cells_in_row
-    // but be more conservative - only allow horizontal merge if it passes the category row check
-    
-    let non_empty_count = row_with_horizontal.iter().filter(|cell| !cell.is_empty()).count();
-    let total_cells = row_with_horizontal.len();
-    
-    // If this looks like a category row (too few non-empty cells), don't do horizontal propagation
-    if total_cells > 5 && (non_empty_count as f32 / total_cells as f32) < 0.3 {
-        return false;
-    }
-    
-    // Otherwise, allow horizontal propagation if within distance limit
-    // Find the nearest non-empty cell to the left
-    let mut distance = 0;
-    for i in (0..col_idx).rev() {
-        distance += 1;
-        if !row_with_horizontal[i].is_empty() {
-            return distance <= 3; // Within reasonable distance
-        }
-        if distance > 3 {
+        // Limit upward search to prevent excessive lookups
+        if current_row - check_row > 10 {
             break;
         }
     }
     
-    false // No source cell found within reasonable distance
-}
-
-fn create_field_mapping(headers: &[String]) -> HashMap<String, String> {
-    let mut field_map = HashMap::new();
-    
-    // Use default field variations if conversion map is not available
-    let default_variations = ConversionMap::get_default_field_variations();
-    
-    // Sort headers by length (longer first) to prefer more specific matches
-    let mut sorted_headers: Vec<&String> = headers.iter().collect();
-    sorted_headers.sort_by_key(|h| std::cmp::Reverse(h.len()));
-    
-    for (field_name, variations) in default_variations {
-        let mut field_matched = false;
-        
-        // Sort variations by length (longer first) to prefer more specific matches  
-        let mut sorted_variations = variations.clone();
-        sorted_variations.sort_by_key(|v| std::cmp::Reverse(v.len()));
-        
-        for header in &sorted_headers {
-            if field_matched { break; }
-            
-            let header_lower = header.to_lowercase()
-                .replace('\r', " ")  // Replace carriage returns with spaces
-                .replace('\n', " ")  // Replace line feeds with spaces
-                .split_whitespace()  // Split by any whitespace and rejoin with single spaces
-                .collect::<Vec<&str>>()
-                .join(" ");
-            
-            for variation in &sorted_variations {
-                let variation_lower = variation.to_lowercase();
-                
-                // Prefer exact matches first
-                if header_lower == variation_lower {
-                    field_map.insert(field_name.clone(), (*header).clone());
-                    log::info!("✅ EXACT FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
-                    field_matched = true;
-                    break;
-                } 
-                // Then try partial matches, but only if no exact match found
-                else if header_lower.contains(&variation_lower) || variation_lower.contains(&header_lower) {
-                    // Only use partial match if we haven't found a better match already
-                    if !field_map.contains_key(&field_name) {
-                        field_map.insert(field_name.clone(), (*header).clone());
-                        log::info!("✅ PARTIAL FALLBACK MATCH: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
-                    }
-                }
-            }
-        }
-    }
-    
-    log::info!("Fallback field mapping created {} mappings: {:?}", field_map.len(), field_map);
-    field_map
-}
-
-pub fn create_conversion_field_mapping(headers: &[String], conversion_mappings: &HashMap<String, String>) -> HashMap<String, String> {
-    let mut field_map = HashMap::new();
-    
-    // Helper function to normalize headers for comparison
-    let normalize_header = |header: &str| -> String {
-        header.to_lowercase()
-            .replace('\r', " ")  // Replace carriage returns with spaces
-            .replace('\n', " ")  // Replace line feeds with spaces
-            .split_whitespace()  // Split by any whitespace and rejoin with single spaces
-            .collect::<Vec<&str>>()
-            .join(" ")
-    };
-    
-    // Sort conversion mappings by specificity (longer keys first) to prioritize exact matches
-    let mut sorted_mappings: Vec<_> = conversion_mappings.iter().collect();
-    sorted_mappings.sort_by_key(|(excel_header, _)| std::cmp::Reverse(excel_header.len()));
-    
-    // PHASE 1: Process ALL exact matches first (absolute priority)
-    for header in headers {
-        let normalized_header = normalize_header(header);
-        log::debug!("Phase 1 - Processing header for exact match: '{}' -> normalized: '{}'", header, normalized_header);
-        
-        // Try exact match across all conversion mappings
-        for (excel_header, target_field) in &sorted_mappings {
-            let normalized_excel_header = normalize_header(excel_header);
-            
-            if normalized_header == normalized_excel_header {
-                // Only map if this field hasn't been mapped already
-                if !field_map.contains_key(*target_field) {
-                    field_map.insert(target_field.to_string(), header.clone());
-                    log::info!("✅ EXACT MATCH (Phase 1): '{}' -> '{}' (normalized '{}' == '{}')", header, target_field, normalized_header, normalized_excel_header);
-                } else {
-                    log::debug!("Skipping exact mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
-                }
-                break; // Found exact match, no need to check other mappings for this header
-            }
-        }
-    }
-    
-    // PHASE 2: Process partial matches only for unmapped headers
-    for header in headers {
-        let normalized_header = normalize_header(header);
-        
-        // Skip if this header was already mapped in Phase 1
-        let already_mapped = field_map.values().any(|mapped_header| mapped_header == header);
-        if already_mapped {
-            log::debug!("Phase 2 - Skipping header '{}' (already mapped in exact match phase)", header);
-            continue;
-        }
-        
-        log::debug!("Phase 2 - Processing header for partial match: '{}' -> normalized: '{}'", header, normalized_header);
-        
-        // Try partial matching - longer mappings first
-        let mut found = false;
-        for (excel_header, target_field) in &sorted_mappings {
-            let normalized_excel_header = normalize_header(excel_header);
-            
-            if normalized_header.contains(&normalized_excel_header) || normalized_excel_header.contains(&normalized_header) {
-                // Only map if this field hasn't been mapped to any header yet
-                if !field_map.contains_key(*target_field) {
-                    field_map.insert(target_field.to_string(), header.clone());
-                    log::info!("✅ PARTIAL MATCH (Phase 2): '{}' -> '{}' (normalized '{}' contains '{}')", header, target_field, normalized_header, normalized_excel_header);
-                } else {
-                    log::debug!("Skipping partial mapping '{}' -> '{}' because field already mapped to '{}'", header, target_field, field_map.get(*target_field).unwrap());
-                }
-                found = true;
-                break;
-            }
-        }
-        
-        if !found {
-            log::warn!("❌ NO MATCH FOUND for header: '{}'", header);
-        }
-    }
-    
-    // If no mappings found using conversion map, fall back to field variations
-    if field_map.is_empty() {
-        log::warn!("No mappings from conversion map, falling back to field variations");
-        let default_variations = ConversionMap::get_default_field_variations();
-        
-        // Sort headers by length (longer first) for better matching
-        let mut sorted_headers: Vec<&String> = headers.iter().collect();
-        sorted_headers.sort_by_key(|h| std::cmp::Reverse(h.len()));
-        
-        for (field_name, variations) in &default_variations {
-            let mut field_matched = false;
-            
-            // Sort variations by length (longer first) 
-            let mut sorted_variations = variations.clone();
-            sorted_variations.sort_by_key(|v| std::cmp::Reverse(v.len()));
-            
-            for header in &sorted_headers {
-                if field_matched { break; }
-                
-                let normalized_header = normalize_header(header);
-                
-                for variation in &sorted_variations {
-                    let variation_lower = variation.to_lowercase();
-                    
-                    // Prefer exact matches first
-                    if normalized_header == variation_lower {
-                        field_map.insert(field_name.clone(), (*header).clone());
-                        log::info!("✅ EXACT VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
-                        field_matched = true;
-                        break;
-                    }
-                    // Then partial matches if no exact match found
-                    else if !field_map.contains_key(field_name) && 
-                           (normalized_header.contains(&variation_lower) || variation_lower.contains(&normalized_header)) {
-                        field_map.insert(field_name.clone(), (*header).clone());
-                        log::info!("✅ PARTIAL VARIATION FALLBACK: '{}' -> '{}' (via variation '{}')", header, field_name, variation);
-                    }
-                }
-            }
-        }
-    }
-    
-    log::info!("Conversion field mapping created {} mappings: {:?}", field_map.len(), field_map);
-    if field_map.is_empty() {
-        log::warn!("NO FIELD MAPPINGS CREATED! Headers: {:?}", headers);
-        log::warn!("Conversion mappings available: {:?}", conversion_mappings);
-    }
-    field_map
-}
-
-/// Normalize link speed values to standard format
-/// 
-/// Converts various speed formats to the standard "XG" format:
-/// - "25GB" -> "25G"
-/// - "25 GB" -> "25G"
-/// - "25Gbps" -> "25G"  
-/// - "25 Gbps" -> "25G"
-/// - "10GB" -> "10G"
-/// - "1GB" -> "1G"
-/// - "100MB" -> "100M"
-/// 
-/// This prevents issues like "25GB Gbps" appearing in the UI.
-fn normalize_link_speed(speed: &str) -> String {
-    let speed = speed.trim().to_lowercase();
-    
-    // Check what unit the original speed had
-    let is_mbps = speed.contains("mbps") || speed.contains("mb");
-    let is_gbps = speed.contains("gbps") || speed.contains("gb");
-    
-    // Remove common suffixes and normalize to standard format
-    let speed = speed
-        .replace("gbps", "")
-        .replace("mbps", "")
-        .replace("gb", "")
-        .replace("mb", "");
-    
-    // Remove all whitespace to get just the numeric part
-    let numeric_part: String = speed.chars().filter(|c| !c.is_whitespace()).collect();
-    
-    // Determine the appropriate unit based on original format
-    if is_mbps {
-        format!("{}M", numeric_part)
-    } else if is_gbps {
-        format!("{}G", numeric_part)
-    } else if numeric_part.chars().all(|c| c.is_ascii_digit()) && !numeric_part.is_empty() {
-        // Pure number, assume GB
-        format!("{}G", numeric_part)
-    } else {
-        // Already normalized (ends with G or M) - just uppercase it
-        let mut chars: Vec<char> = numeric_part.chars().collect();
-        if let Some(last_char) = chars.last_mut() {
-            if *last_char == 'g' || *last_char == 'm' {
-                *last_char = last_char.to_uppercase().next().unwrap_or(*last_char);
-            }
-        }
-        chars.into_iter().collect()
-    }
-}
-
-/// Parse speed value from normalized speed string for interface naming
-/// 
-/// Converts normalized speed strings to numeric values for comparison:
-/// - "25G" -> 25.0
-/// - "10G" -> 10.0  
-/// - "1G" -> 1.0
-/// - "100M" -> 0.1 (converted to GB equivalent)
-/// - "" or invalid -> 1.0 (default to 1G)
-/// 
-/// This enables speed-based interface prefix selection for switch interfaces.
-fn parse_speed_value(normalized_speed: &str) -> f32 {
-    let speed = normalized_speed.trim().to_uppercase();
-    
-    // Handle empty or invalid input - default to 1G
-    if speed.is_empty() {
-        return 1.0;
-    }
-    
-    // Extract numeric part and unit
-    let mut numeric_part = String::new();
-    let mut unit = String::new();
-    
-    for char in speed.chars() {
-        if char.is_ascii_digit() || char == '.' {
-            numeric_part.push(char);
-        } else {
-            unit.push(char);
-        }
-    }
-    
-    // Parse numeric value, default to 1.0 if invalid
-    let numeric_value: f32 = numeric_part.parse().unwrap_or(1.0);
-    
-    // Convert to GB equivalent based on unit
-    match unit.as_str() {
-        "G" => numeric_value,           // Gigabit as-is
-        "M" => numeric_value / 1000.0,  // Megabit to Gigabit (100M = 0.1G)
-        "T" => numeric_value * 1000.0,  // Terabit to Gigabit (rare but covered)
-        _ => numeric_value,             // Default: assume Gigabit
-    }
-}
-
-/// Check if a port value is a simple numeric port that should be transformed
-/// 
-/// Returns true for simple numeric ports like "2", "5", "1" that should
-/// be converted to interface names like "et-0/0/2".
-/// 
-/// Returns false for complex interface names that should be preserved as-is:
-/// - "xe-0/0/1", "eth0", "Port-channel1", "ae0", etc.
-fn is_simple_numeric_port(port: &str) -> bool {
-    let port = port.trim();
-    
-    // Must be non-empty and contain only digits
-    !port.is_empty() && port.chars().all(|c| c.is_ascii_digit())
-}
-
-/// Generate interface name based on port number and link speed
-/// 
-/// Creates standardized interface names for network provisioning:
-/// - Port "2" + Speed "25G" → "et-0/0/2" (>10G = et)
-/// - Port "5" + Speed "10G" → "xe-0/0/5" (=10G = xe)  
-/// - Port "1" + Speed "1G" → "ge-0/0/1" (<10G = ge)
-/// 
-/// Only applies to simple numeric ports. Complex interface names are preserved.
-fn generate_interface_name(port: &str, normalized_speed: &str) -> String {
-    // Only transform simple numeric ports
-    if !is_simple_numeric_port(port) {
-        return port.to_string();
-    }
-    
-    let speed_value = parse_speed_value(normalized_speed);
-    
-    // Determine prefix based on speed thresholds
-    let prefix = if speed_value > 10.0 {
-        "et"  // Ethernet (25G, 40G, 100G, etc.)
-    } else if speed_value == 10.0 {
-        "xe"  // 10 Gigabit Ethernet
-    } else {
-        "ge"  // Gigabit Ethernet (1G and below)
-    };
-    
-    format!("{}-0/0/{}", prefix, port.trim())
-}
-
-fn convert_to_network_config_row(
-    row_data: &HashMap<String, String>,
-    field_map: &HashMap<String, String>
-) -> Option<NetworkConfigRow> {
-    let get_field = |field_name: &str| -> Option<String> {
-        let result = field_map.get(field_name)
-            .and_then(|header| row_data.get(header))
-            .filter(|value| !value.trim().is_empty())  // Check trimmed value
-            .map(|s| s.to_string());
-        
-        if result.is_none() {
-            log::debug!("Field '{}' not found or empty. Field map entry: {:?}, Row data for header: {:?}", 
-                field_name, field_map.get(field_name), 
-                field_map.get(field_name).and_then(|h| row_data.get(h)));
-        }
-        result
-    };
-    
-    // Check if we have minimum required fields (switch_label and switch_ifname)
-    let switch_label = get_field("switch_label");
-    let raw_switch_ifname = get_field("switch_ifname");
-    
-    // Apply interface name transformation based on port and speed
-    let switch_ifname = raw_switch_ifname.clone().map(|port| {
-        let speed = get_field("link_speed").unwrap_or_else(|| "1G".to_string());
-        let normalized_speed = normalize_link_speed(&speed);
-        generate_interface_name(&port, &normalized_speed)
-    });
-    
-    log::debug!("Processing row - switch_label: {:?}, switch_ifname: {:?}", switch_label, switch_ifname);
-    log::debug!("Available row data keys: {:?}", row_data.keys().collect::<Vec<_>>());
-    log::debug!("Field map for switch fields: switch_label={:?}, switch_ifname={:?}", 
-        field_map.get("switch_label"), field_map.get("switch_ifname"));
-    
-    if switch_label.is_none() || raw_switch_ifname.is_none() {
-        log::debug!("Skipping row due to missing required switch fields (switch_label: {:?}, switch_ifname: {:?})", switch_label, raw_switch_ifname);
-        return None; // Skip rows without essential network info  
-    }
-    
-    Some(NetworkConfigRow {
-        blueprint: None, // Blueprint is determined by application context, not Excel input
-        server_label: get_field("server_label"),
-        is_external: get_field("is_external").and_then(|s| {
-            match s.to_lowercase().as_str() {
-                "true" | "yes" | "1" | "y" => Some(true),
-                "false" | "no" | "0" | "n" => Some(false),
-                _ => None,
-            }
-        }),
-        server_tags: get_field("server_tags"),
-        link_group_ifname: get_field("link_group_ifname"),
-        link_group_lag_mode: get_field("link_group_lag_mode"),
-        link_group_ct_names: get_field("link_group_ct_names"),
-        link_group_tags: get_field("link_group_tags"),
-        link_speed: get_field("link_speed").map(|speed| normalize_link_speed(&speed)),
-        server_ifname: get_field("server_ifname"),
-        switch_label,
-        switch_ifname,
-        link_tags: get_field("link_tags"),
-        comment: get_field("comment"),
-    })
-}
-
-#[command]
-pub async fn validate_data(data: Vec<NetworkConfigRow>) -> Result<Vec<NetworkConfigRow>, String> {
-    log::info!("Validating {} rows of data", data.len());
-    
-    // Filter to only include rows with both switch_label and switch_ifname defined
-    let filtered_data: Vec<NetworkConfigRow> = data.into_iter()
-        .filter(|row| row.switch_label.is_some() && row.switch_ifname.is_some())
-        .collect();
-    
-    log::info!("Filtered to {} rows with both switch name and interface defined", filtered_data.len());
-    
-    // Remove duplicates based on switch_label + switch_ifname combination
-    let mut seen_combinations = std::collections::HashSet::new();
-    let mut deduplicated_data = Vec::new();
-    let original_count = filtered_data.len();
-    
-    for row in filtered_data {
-        let key = (row.switch_label.clone(), row.switch_ifname.clone());
-        if seen_combinations.insert(key.clone()) {
-            log::debug!("Keeping unique combination: {:?} + {:?}", key.0, key.1);
-            deduplicated_data.push(row);
-        } else {
-            log::debug!("Skipping duplicate combination: {:?} + {:?}", key.0, key.1);
-        }
-    }
-    
-    log::info!("After deduplication: {} unique rows (removed {} duplicates)", 
-        deduplicated_data.len(), 
-        original_count - deduplicated_data.len());
-    
-    Ok(deduplicated_data)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashMap;
-    use crate::models::conversion_map::ConversionMap;
-
-    fn create_test_conversion_map() -> ConversionMap {
-        let mut mappings = HashMap::new();
-        mappings.insert("Switch Name".to_string(), "switch_label".to_string());
-        mappings.insert("Port".to_string(), "switch_ifname".to_string());
-        mappings.insert("Host Name".to_string(), "server_label".to_string());
-        mappings.insert("Slot/Port".to_string(), "server_ifname".to_string());
-        mappings.insert("Speed\n(GB)".to_string(), "link_speed".to_string());
-        mappings.insert("External".to_string(), "is_external".to_string());
-        
-        ConversionMap::new(Some(2), mappings)
-    }
-
-    fn create_test_headers() -> Vec<String> {
-        vec![
-            "Switch Name".to_string(),
-            "Port".to_string(), 
-            "Host Name".to_string(),
-            "Slot/Port".to_string(),
-            "Speed\n(GB)".to_string(),
-            "External".to_string(),
-        ]
-    }
-
-    fn create_test_row_data() -> HashMap<String, String> {
-        let mut row_data = HashMap::new();
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
-        row_data.insert("Host Name".to_string(), "server01".to_string());
-        row_data.insert("Slot/Port".to_string(), "eth0".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "10".to_string());
-        row_data.insert("External".to_string(), "false".to_string());
-        row_data
-    }
-
-    #[test]
-    fn test_create_conversion_field_mapping_exact_match() {
-        let headers = create_test_headers();
-        let conversion_map = create_test_conversion_map();
-        
-        let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
-        
-        // Verify exact matches
-        assert_eq!(field_map.get("switch_label"), Some(&"Switch Name".to_string()));
-        assert_eq!(field_map.get("switch_ifname"), Some(&"Port".to_string()));
-        assert_eq!(field_map.get("server_label"), Some(&"Host Name".to_string()));
-        assert_eq!(field_map.get("server_ifname"), Some(&"Slot/Port".to_string()));
-        assert_eq!(field_map.get("link_speed"), Some(&"Speed\n(GB)".to_string()));
-        assert_eq!(field_map.get("is_external"), Some(&"External".to_string()));
-    }
-
-    #[test]
-    fn test_create_conversion_field_mapping_normalized_headers() {
-        let headers = vec![
-            "SWITCH NAME".to_string(),
-            "  port  ".to_string(), 
-            "Host\r\nName".to_string(), // With carriage return + line feed (more realistic)
-            "slot/port".to_string(), // Different case
-        ];
-        
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&headers, &conversion_map.mappings);
-        
-        // Verify normalization works - should match after case/whitespace/line ending normalization
-        assert_eq!(field_map.get("switch_label"), Some(&"SWITCH NAME".to_string()));
-        assert_eq!(field_map.get("switch_ifname"), Some(&"  port  ".to_string()));
-        // Host\r\nName should match "Host Name" after normalization (line endings removed)
-        assert_eq!(field_map.get("server_label"), Some(&"Host\r\nName".to_string()));
-        assert_eq!(field_map.get("server_ifname"), Some(&"slot/port".to_string()));
-    }
-
-    #[test]
-    fn test_create_field_mapping_with_variations() {
-        let headers = vec![
-            "Switch".to_string(), // Should match switch_label variation
-            "Interface".to_string(), // Should match switch_ifname variation
-            "Server".to_string(), // Should match server_label variation
-            "NIC".to_string(), // Should match server_ifname variation
-        ];
-        
-        let field_map = create_field_mapping(&headers);
-        
-        // Verify field variations work
-        assert_eq!(field_map.get("switch_label"), Some(&"Switch".to_string()));
-        assert_eq!(field_map.get("switch_ifname"), Some(&"Interface".to_string()));
-        assert_eq!(field_map.get("server_label"), Some(&"Server".to_string()));
-        assert_eq!(field_map.get("server_ifname"), Some(&"NIC".to_string()));
-    }
-
-    #[test]
-    fn test_convert_to_network_config_row_valid() {
-        let row_data = create_test_row_data();
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        
-        assert_eq!(row.switch_label, Some("switch01".to_string()));
-        assert_eq!(row.switch_ifname, Some("xe-0/0/1".to_string()));
-        assert_eq!(row.server_label, Some("server01".to_string()));
-        assert_eq!(row.server_ifname, Some("eth0".to_string()));
-        assert_eq!(row.link_speed, Some("10G".to_string()));
-        assert_eq!(row.is_external, Some(false));
-        assert_eq!(row.blueprint, None); // Blueprint should always be None
-    }
-
-    #[test]
-    fn test_convert_to_network_config_row_missing_required_fields() {
-        let mut row_data = HashMap::new();
-        row_data.insert("Host Name".to_string(), "server01".to_string());
-        // Missing both switch_label and switch_ifname
-        
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        
-        assert!(network_row.is_none()); // Should be None due to missing required fields
-    }
-
-    #[test]
-    fn test_convert_to_network_config_row_empty_values() {
-        let mut row_data = HashMap::new();
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
-        row_data.insert("Host Name".to_string(), "".to_string()); // Empty value
-        row_data.insert("Slot/Port".to_string(), "   ".to_string()); // Whitespace only
-        
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        
-        assert_eq!(row.switch_label, Some("switch01".to_string()));
-        assert_eq!(row.switch_ifname, Some("xe-0/0/1".to_string()));
-        assert_eq!(row.server_label, None); // Empty value should be None
-        assert_eq!(row.server_ifname, None); // Whitespace-only should be None
-    }
-
-    #[test]
-    fn test_boolean_field_parsing() {
-        let mut row_data = HashMap::new();
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Port".to_string(), "xe-0/0/1".to_string());
-        row_data.insert("External".to_string(), "true".to_string());
-        
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        let row = network_row.unwrap();
-        assert_eq!(row.is_external, Some(true));
-        
-        // Test different boolean representations
-        let test_cases = vec![
-            ("true", Some(true)),
-            ("TRUE", Some(true)),
-            ("yes", Some(true)),
-            ("YES", Some(true)),
-            ("1", Some(true)),
-            ("y", Some(true)),
-            ("false", Some(false)),
-            ("FALSE", Some(false)),
-            ("no", Some(false)),
-            ("NO", Some(false)),
-            ("0", Some(false)),
-            ("n", Some(false)),
-            ("maybe", None),
-            ("invalid", None),
-        ];
-        
-        for (input, expected) in test_cases {
-            let mut test_row_data = row_data.clone();
-            test_row_data.insert("External".to_string(), input.to_string());
-            
-            let test_network_row = convert_to_network_config_row(&test_row_data, &field_map);
-            let test_row = test_network_row.unwrap();
-            assert_eq!(test_row.is_external, expected, "Failed for input: '{}'", input);
-        }
-    }
-
-    #[test]
-    fn test_header_priority_matching() {
-        // Test that longer, more specific headers are preferred
-        let headers = vec![
-            "Slot".to_string(), 
-            "Slot/Port".to_string(), // This should be preferred for server_ifname
-        ];
-        
-        let field_map = create_field_mapping(&headers);
-        
-        // Should prefer "Slot/Port" over "Slot" for server_ifname
-        assert_eq!(field_map.get("server_ifname"), Some(&"Slot/Port".to_string()));
-    }
-
-    #[test]
-    fn test_normalization_function() {
-        let normalize_header = |header: &str| -> String {
-            header.to_lowercase()
-                .replace('\r', " ")  // Replace with spaces
-                .replace('\n', " ")  // Replace with spaces
-                .split_whitespace()  // Split by any whitespace and rejoin with single spaces
-                .collect::<Vec<&str>>()
-                .join(" ")
-        };
-        
-        // Test that these normalize to the same value
-        let normalized1 = normalize_header("Host\r\nName");
-        let normalized2 = normalize_header("Host Name");
-        
-        println!("'Host\\r\\nName' normalizes to: '{}'", normalized1);
-        println!("'Host Name' normalizes to: '{}'", normalized2);
-        
-        assert_eq!(normalized1, normalized2, "Headers should normalize to the same value");
-    }
-
-    #[test]
-    fn test_propagate_merged_cells_in_row() {
-        use calamine::DataType;
-        
-        // Create a test row with merged cells pattern
-        // "Server1", "", "", "Port1", "", "Speed1"
-        // This simulates merged cells where Server1 spans 3 columns and Port1 spans 2 columns
-        let test_row = vec![
-            Data::String("Server1".to_string()),  // First cell of merged range
-            Data::Empty,                           // Empty cell (part of merge)
-            Data::Empty,                           // Empty cell (part of merge)
-            Data::String("Port1".to_string()),     // Next non-empty cell
-            Data::Empty,                           // Empty cell (part of merge)
-            Data::String("Speed1".to_string()),    // Standalone cell
-        ];
-        
-        let result = propagate_merged_cells_in_row(&test_row);
-        
-        // Verify that merged cell values are propagated
-        assert_eq!(result[0].to_string(), "Server1");
-        assert_eq!(result[1].to_string(), "Server1"); // Should be propagated
-        assert_eq!(result[2].to_string(), "Server1"); // Should be propagated
-        assert_eq!(result[3].to_string(), "Port1");
-        assert_eq!(result[4].to_string(), "Port1");   // Should be propagated
-        assert_eq!(result[5].to_string(), "Speed1");
-    }
-
-    #[test]
-    fn test_propagate_merged_cells_with_leading_empty() {
-        use calamine::DataType;
-        
-        // Test row that starts with empty cells
-        let test_row = vec![
-            Data::Empty,                          // Leading empty cell
-            Data::Empty,                          // Leading empty cell
-            Data::String("Value1".to_string()),   // First non-empty
-            Data::Empty,                          // Should be propagated
-            Data::String("Value2".to_string()),   // New value
-        ];
-        
-        let result = propagate_merged_cells_in_row(&test_row);
-        
-        // Leading empty cells should remain empty
-        assert!(result[0].is_empty());
-        assert!(result[1].is_empty());
-        assert_eq!(result[2].to_string(), "Value1");
-        assert_eq!(result[3].to_string(), "Value1"); // Should be propagated
-        assert_eq!(result[4].to_string(), "Value2");
-    }
-
-    #[test]
-    fn test_propagate_merged_cells_category_row_detection() {
-        use calamine::DataType;
-        
-        // Test category/header row that shouldn't be propagated
-        // This simulates "Linux RHEL8.7" in first cell with many empty cells after
-        let category_row = vec![
-            Data::String("Linux RHEL8.7".to_string()), // Category header
-            Data::Empty,                                // Empty
-            Data::Empty,                                // Empty  
-            Data::Empty,                                // Empty
-            Data::Empty,                                // Empty
-            Data::Empty,                                // Empty
-            Data::Empty,                                // Empty
-            Data::Empty,                                // Empty
-        ];
-        
-        let result = propagate_merged_cells_in_row(&category_row);
-        
-        // Should not propagate - only first cell should have value
-        assert_eq!(result[0].to_string(), "Linux RHEL8.7");
-        assert!(result[1].is_empty());
-        assert!(result[2].is_empty());
-        assert!(result[3].is_empty());
-        assert!(result[4].is_empty());
-        assert!(result[5].is_empty());
-        assert!(result[6].is_empty());
-        assert!(result[7].is_empty());
-    }
-
-    #[test]
-    fn test_propagate_merged_cells_distance_limit() {
-        use calamine::DataType;
-        
-        // Test that propagation stops after reasonable distance
-        // Make sure row has enough cells to not trigger category detection (>30% non-empty)
-        let test_row = vec![
-            Data::String("Value1".to_string()),   // Non-empty 1
-            Data::Empty,                          // Distance 1 - should propagate
-            Data::Empty,                          // Distance 2 - should propagate  
-            Data::Empty,                          // Distance 3 - should propagate
-            Data::Empty,                          // Distance 4 - should NOT propagate (too far)
-            Data::String("Value2".to_string()),   // Non-empty 2 - prevents category detection
-        ];
-        
-        let result = propagate_merged_cells_in_row(&test_row);
-        
-        assert_eq!(result[0].to_string(), "Value1");
-        assert_eq!(result[1].to_string(), "Value1"); // Distance 1 - propagated
-        assert_eq!(result[2].to_string(), "Value1"); // Distance 2 - propagated
-        assert_eq!(result[3].to_string(), "Value1"); // Distance 3 - propagated
-        assert!(result[4].is_empty());               // Distance 4 - not propagated (reset due to distance limit)
-        assert_eq!(result[5].to_string(), "Value2"); // Original value preserved
-    }
-
-    #[test]
-    fn test_propagate_vertical_merged_cells() {
-        use calamine::DataType;
-        
-        // Create test data with vertical merged cells pattern
-        // This simulates the server name pattern where "r2lb103960" spans multiple rows
-        let headers = vec![
-            "Switch Name".to_string(),
-            "Port".to_string(),
-            "Host Name".to_string(),      // This column will have vertical merges
-            "Slot/Port".to_string(),
-        ];
-        
-        let data_rows = vec![
-            // Row 1: Has server name "r2lb103960"
-            vec![
-                Data::String("CRL01P24L09".to_string()),
-                Data::String("2".to_string()),
-                Data::String("r2lb103960".to_string()),
-                Data::String("2".to_string()),
-            ],
-            // Row 2: Server name should be carried down from row 1
-            vec![
-                Data::String("CRL01P24L10".to_string()),
-                Data::String("2".to_string()),
-                Data::Empty,  // Empty - should get "r2lb103960" from above
-                Data::String("2".to_string()),
-            ],
-            // Row 3: New server name "r2lb103959"
-            vec![
-                Data::String("CRL01P24L09".to_string()),
-                Data::String("5".to_string()),
-                Data::String("r2lb103959".to_string()),
-                Data::String("5".to_string()),
-            ],
-            // Row 4: Server name should be carried down from row 3
-            vec![
-                Data::String("CRL01P24L10".to_string()),
-                Data::String("5".to_string()),
-                Data::Empty,  // Empty - should get "r2lb103959" from above
-                Data::String("5".to_string()),
-            ],
-        ];
-        
-        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
-        
-        assert_eq!(result.len(), 4);
-        
-        // Check first row - should have original value
-        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
-        assert_eq!(result[0].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
-        
-        // Check second row - should have carried down server name
-        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string()));
-        assert_eq!(result[1].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
-        
-        // Check third row - should have new server name
-        assert_eq!(result[2].get("Host Name"), Some(&"r2lb103959".to_string()));
-        assert_eq!(result[2].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
-        
-        // Check fourth row - should have carried down new server name
-        assert_eq!(result[3].get("Host Name"), Some(&"r2lb103959".to_string()));
-        assert_eq!(result[3].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
-    }
-
-    #[test]
-    fn test_intelligent_merged_cells_vertical_only() {
-        use calamine::DataType;
-        
-        // Test intelligent merged cell detection (vertical-only to avoid false positives)
-        let headers = vec![
-            "Switch Name".to_string(),
-            "Port".to_string(),
-            "Host Name".to_string(),
-            "Slot/Port".to_string(),
-        ];
-        
-        let data_rows = vec![
-            // Row 1: Has server name
-            vec![
-                Data::String("server001".to_string()),
-                Data::String("port1".to_string()),
-                Data::String("r2lb103960".to_string()),
-                Data::String("eth0".to_string()),
-            ],
-            // Row 2: Empty host name should get vertical merge, other fields stay as-is
-            vec![
-                Data::String("server002".to_string()),
-                Data::String("port2".to_string()),
-                Data::Empty,   // Should be filled vertically from "r2lb103960"
-                Data::String("eth1".to_string()),
-            ],
-        ];
-        
-        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
-        
-        assert_eq!(result.len(), 2);
-        
-        // First row: all values preserved as-is
-        assert_eq!(result[0].get("Switch Name"), Some(&"server001".to_string()));
-        assert_eq!(result[0].get("Port"), Some(&"port1".to_string()));
-        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
-        assert_eq!(result[0].get("Slot/Port"), Some(&"eth0".to_string()));
-        
-        // Second row: vertical merge for Host Name, other fields unchanged
-        assert_eq!(result[1].get("Switch Name"), Some(&"server002".to_string()));
-        assert_eq!(result[1].get("Port"), Some(&"port2".to_string()));
-        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string())); // Vertical merge
-        assert_eq!(result[1].get("Slot/Port"), Some(&"eth1".to_string()));
-    }
-
-    #[test] 
-    fn test_intelligent_merged_cell_detection() {
-        use calamine::DataType;
-        
-        // Test the intelligent merged cell detection (vertical merges primarily)
-        let headers = vec![
-            "Switch Name".to_string(),
-            "Port".to_string(),
-            "Host Name".to_string(),      
-            "Slot/Port".to_string(),
-        ];
-        
-        let data_rows = vec![
-            // Row 1: Has server name "r2lb103960"
-            vec![
-                Data::String("CRL01P24L09".to_string()),
-                Data::String("2".to_string()),
-                Data::String("r2lb103960".to_string()),
-                Data::String("2".to_string()),
-            ],
-            // Row 2: Server name cell is empty - should get vertical merge
-            vec![
-                Data::String("CRL01P24L10".to_string()),
-                Data::String("2".to_string()),
-                Data::Empty,  // This will be filled by vertical merge
-                Data::String("2".to_string()),
-            ],
-            // Row 3: New server name "r2lb103959"  
-            vec![
-                Data::String("CRL01P24L09".to_string()),
-                Data::String("5".to_string()),
-                Data::String("r2lb103959".to_string()),
-                Data::String("5".to_string()),
-            ],
-            // Row 4: Server name cell is empty - should get vertical merge
-            vec![
-                Data::String("CRL01P24L10".to_string()),
-                Data::String("5".to_string()),
-                Data::Empty,  // This will be filled by vertical merge
-                Data::String("5".to_string()),
-            ],
-        ];
-        
-        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
-        
-        assert_eq!(result.len(), 4);
-        
-        // Check that vertical merges were applied correctly
-        assert_eq!(result[0].get("Host Name"), Some(&"r2lb103960".to_string()));
-        assert_eq!(result[1].get("Host Name"), Some(&"r2lb103960".to_string())); // Vertical merge from row 1
-        assert_eq!(result[2].get("Host Name"), Some(&"r2lb103959".to_string()));
-        assert_eq!(result[3].get("Host Name"), Some(&"r2lb103959".to_string())); // Vertical merge from row 3
-        
-        // Verify other fields are preserved
-        assert_eq!(result[0].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
-        assert_eq!(result[1].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
-        assert_eq!(result[2].get("Switch Name"), Some(&"CRL01P24L09".to_string()));
-        assert_eq!(result[3].get("Switch Name"), Some(&"CRL01P24L10".to_string()));
-    }
-
-    #[test]
-    fn test_comprehensive_merged_cells_all_scenarios() {
-        use calamine::DataType;
-        
-        // Test all three merge scenarios in one comprehensive test
-        let headers = vec![
-            "Switch".to_string(),
-            "Port".to_string(), 
-            "Server".to_string(),
-            "Interface".to_string(),
-            "Speed".to_string(),
-        ];
-        
-        let data_rows = vec![
-            // Row 1: Horizontal merge (Switch spans to Port) + Server value
-            vec![
-                Data::String("SwitchA".to_string()),
-                Data::Empty,                            // Horizontal merge from SwitchA
-                Data::String("ServerX".to_string()),
-                Data::String("eth0".to_string()),
-                Data::String("10G".to_string()),
-            ],
-            // Row 2: Vertical merge for Server, horizontal merge for Interface
-            vec![
-                Data::String("SwitchB".to_string()),
-                Data::String("port2".to_string()),
-                Data::Empty,                            // Vertical merge from ServerX
-                Data::String("eth1".to_string()),
-                Data::Empty,                            // Horizontal merge from eth1
-            ],
-            // Row 3: New server (breaks vertical merge), rectangular merge simulation
-            vec![
-                Data::String("SwitchC".to_string()),
-                Data::Empty,                            // Horizontal from SwitchC
-                Data::String("ServerY".to_string()),
-                Data::Empty,                            // Horizontal from ServerY
-                Data::Empty,                            // Horizontal from ServerY
-            ],
-            // Row 4: Vertical continuation of ServerY
-            vec![
-                Data::String("SwitchD".to_string()),
-                Data::String("port4".to_string()),
-                Data::Empty,                            // Vertical merge from ServerY
-                Data::String("eth3".to_string()),
-                Data::String("25G".to_string()),
-            ],
-        ];
-        
-        let result = apply_intelligent_merged_cell_detection(&data_rows, &headers);
-        
-        assert_eq!(result.len(), 4);
-        
-        // Row 1: Horizontal merge SwitchA -> Port
-        assert_eq!(result[0].get("Switch"), Some(&"SwitchA".to_string()));
-        assert_eq!(result[0].get("Port"), Some(&"SwitchA".to_string()));      // Horizontal merge
-        assert_eq!(result[0].get("Server"), Some(&"ServerX".to_string()));
-        assert_eq!(result[0].get("Interface"), Some(&"eth0".to_string()));
-        assert_eq!(result[0].get("Speed"), Some(&"10G".to_string()));
-        
-        // Row 2: Vertical merge ServerX, horizontal merge eth1 -> Speed
-        assert_eq!(result[1].get("Switch"), Some(&"SwitchB".to_string()));
-        assert_eq!(result[1].get("Port"), Some(&"port2".to_string()));
-        assert_eq!(result[1].get("Server"), Some(&"ServerX".to_string()));    // Vertical merge
-        assert_eq!(result[1].get("Interface"), Some(&"eth1".to_string()));
-        assert_eq!(result[1].get("Speed"), Some(&"eth1".to_string()));        // Horizontal merge
-        
-        // Row 3: New server ServerY, horizontal merges
-        assert_eq!(result[2].get("Switch"), Some(&"SwitchC".to_string()));
-        assert_eq!(result[2].get("Port"), Some(&"SwitchC".to_string()));      // Horizontal merge
-        assert_eq!(result[2].get("Server"), Some(&"ServerY".to_string()));
-        assert_eq!(result[2].get("Interface"), Some(&"ServerY".to_string()));  // Horizontal merge
-        assert_eq!(result[2].get("Speed"), Some(&"ServerY".to_string()));     // Horizontal merge
-        
-        // Row 4: Vertical merge ServerY continues
-        assert_eq!(result[3].get("Switch"), Some(&"SwitchD".to_string()));
-        assert_eq!(result[3].get("Port"), Some(&"port4".to_string()));
-        assert_eq!(result[3].get("Server"), Some(&"ServerY".to_string()));    // Vertical merge
-        assert_eq!(result[3].get("Interface"), Some(&"eth3".to_string()));
-        assert_eq!(result[3].get("Speed"), Some(&"25G".to_string()));
-    }
-
-    #[test]
-    fn test_normalize_link_speed() {
-        // Test cases for speed normalization
-        assert_eq!(normalize_link_speed("25GB"), "25G");
-        assert_eq!(normalize_link_speed("25 GB"), "25G");
-        assert_eq!(normalize_link_speed("25Gbps"), "25G");
-        assert_eq!(normalize_link_speed("25 Gbps"), "25G");
-        assert_eq!(normalize_link_speed("10GB"), "10G");
-        assert_eq!(normalize_link_speed("1GB"), "1G");
-        assert_eq!(normalize_link_speed("100MB"), "100M");
-        assert_eq!(normalize_link_speed("100 MB"), "100M");
-        assert_eq!(normalize_link_speed("100Mbps"), "100M");
-        assert_eq!(normalize_link_speed("100 Mbps"), "100M");
-        
-        // Test numeric-only inputs (should assume GB)
-        assert_eq!(normalize_link_speed("25"), "25G");
-        assert_eq!(normalize_link_speed(" 10 "), "10G");
-        
-        // Test already normalized values
-        assert_eq!(normalize_link_speed("25G"), "25G");
-        assert_eq!(normalize_link_speed("100M"), "100M");
-        
-        // Test case insensitivity
-        assert_eq!(normalize_link_speed("25gb"), "25G");
-        assert_eq!(normalize_link_speed("25gB"), "25G");
-        assert_eq!(normalize_link_speed("100mb"), "100M");
-        
-        // Test edge cases
-        assert_eq!(normalize_link_speed("  25GB  "), "25G");
-        assert_eq!(normalize_link_speed("25"), "25G");
-    }
-
-    #[test]
-    fn test_parse_speed_value() {
-        // Test standard normalized speeds
-        assert_eq!(parse_speed_value("25G"), 25.0);
-        assert_eq!(parse_speed_value("10G"), 10.0);
-        assert_eq!(parse_speed_value("1G"), 1.0);
-        
-        // Test Megabit speeds (converted to GB)
-        assert_eq!(parse_speed_value("100M"), 0.1);  // 100M = 0.1G
-        assert_eq!(parse_speed_value("1000M"), 1.0); // 1000M = 1G
-        
-        // Test decimal values
-        assert_eq!(parse_speed_value("2.5G"), 2.5);
-        assert_eq!(parse_speed_value("0.5G"), 0.5);
-        
-        // Test edge cases
-        assert_eq!(parse_speed_value(""), 1.0);      // Empty -> default 1G
-        assert_eq!(parse_speed_value(" "), 1.0);     // Whitespace -> default 1G  
-        assert_eq!(parse_speed_value("invalid"), 1.0); // Invalid -> default 1G
-        assert_eq!(parse_speed_value("G"), 1.0);     // No number -> default 1G
-        
-        // Test case insensitive
-        assert_eq!(parse_speed_value("25g"), 25.0);
-        assert_eq!(parse_speed_value("100m"), 0.1);
-        
-        // Test with whitespace
-        assert_eq!(parse_speed_value(" 10G "), 10.0);
-        assert_eq!(parse_speed_value("  25G  "), 25.0);
-        
-        // Test Terabit (rare but covered)
-        assert_eq!(parse_speed_value("1T"), 1000.0); // 1T = 1000G
-    }
-
-    #[test]
-    fn test_is_simple_numeric_port() {
-        // Test simple numeric ports (should transform)
-        assert!(is_simple_numeric_port("2"));
-        assert!(is_simple_numeric_port("5"));
-        assert!(is_simple_numeric_port("1"));
-        assert!(is_simple_numeric_port("10"));
-        assert!(is_simple_numeric_port("48"));
-        
-        // Test with whitespace (should still work)
-        assert!(is_simple_numeric_port(" 2 "));
-        assert!(is_simple_numeric_port("  5  "));
-        
-        // Test complex interface names (should NOT transform)
-        assert!(!is_simple_numeric_port("xe-0/0/1"));
-        assert!(!is_simple_numeric_port("eth0"));
-        assert!(!is_simple_numeric_port("Port-channel1"));
-        assert!(!is_simple_numeric_port("ae0"));
-        assert!(!is_simple_numeric_port("ge-0/0/2"));
-        assert!(!is_simple_numeric_port("et-0/0/3"));
-        
-        // Test edge cases (should NOT transform)
-        assert!(!is_simple_numeric_port(""));
-        assert!(!is_simple_numeric_port(" "));
-        assert!(!is_simple_numeric_port("2a"));
-        assert!(!is_simple_numeric_port("a2"));
-        assert!(!is_simple_numeric_port("2.5"));
-        assert!(!is_simple_numeric_port("2-1"));
-    }
-
-    #[test]
-    fn test_generate_interface_name() {
-        // Test speed-based interface generation for simple numeric ports
-        
-        // >10G should use "et-" prefix
-        assert_eq!(generate_interface_name("2", "25G"), "et-0/0/2");
-        assert_eq!(generate_interface_name("5", "40G"), "et-0/0/5");
-        assert_eq!(generate_interface_name("1", "100G"), "et-0/0/1");
-        assert_eq!(generate_interface_name("48", "25G"), "et-0/0/48");
-        
-        // =10G should use "xe-" prefix  
-        assert_eq!(generate_interface_name("3", "10G"), "xe-0/0/3");
-        assert_eq!(generate_interface_name("7", "10G"), "xe-0/0/7");
-        
-        // <10G should use "ge-" prefix
-        assert_eq!(generate_interface_name("1", "1G"), "ge-0/0/1");
-        assert_eq!(generate_interface_name("4", "1G"), "ge-0/0/4");
-        assert_eq!(generate_interface_name("8", "100M"), "ge-0/0/8");  // 100M = 0.1G < 10G
-        
-        // Test with whitespace in port numbers
-        assert_eq!(generate_interface_name(" 2 ", "25G"), "et-0/0/2");
-        assert_eq!(generate_interface_name("  5  ", "10G"), "xe-0/0/5");
-        
-        // Test edge cases - missing/invalid speeds should default to ge- (1G)
-        assert_eq!(generate_interface_name("2", ""), "ge-0/0/2");         // Empty speed
-        assert_eq!(generate_interface_name("3", "invalid"), "ge-0/0/3");  // Invalid speed
-        
-        // Test complex interface names - should be preserved as-is
-        assert_eq!(generate_interface_name("xe-0/0/1", "25G"), "xe-0/0/1");
-        assert_eq!(generate_interface_name("eth0", "10G"), "eth0");
-        assert_eq!(generate_interface_name("Port-channel1", "1G"), "Port-channel1");
-        assert_eq!(generate_interface_name("ae0", "25G"), "ae0");
-        assert_eq!(generate_interface_name("ge-0/0/2", "25G"), "ge-0/0/2");
-        
-        // Test mixed cases
-        assert_eq!(generate_interface_name("2a", "25G"), "2a");          // Not pure numeric
-        assert_eq!(generate_interface_name("a2", "25G"), "a2");          // Not pure numeric
-    }
-
-    #[test]
-    fn test_interface_transformation_integration() {
-        // Test complete integration: Port + Speed → Interface transformation
-        let mut row_data = HashMap::new();
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Host Name".to_string(), "server01".to_string());
-        row_data.insert("Slot/Port".to_string(), "eth0".to_string());
-        row_data.insert("External".to_string(), "false".to_string());
-        
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-
-        // Test case 1: Port "2" + Speed "25G" → "et-0/0/2" (>10G)
-        row_data.insert("Port".to_string(), "2".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25GB".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_ifname, Some("et-0/0/2".to_string()));
-        assert_eq!(row.link_speed, Some("25G".to_string()));
-        
-        // Test case 2: Port "5" + Speed "10G" → "xe-0/0/5" (=10G)  
-        row_data.insert("Port".to_string(), "5".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "10".to_string());  // Will normalize to "10G"
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_ifname, Some("xe-0/0/5".to_string()));
-        assert_eq!(row.link_speed, Some("10G".to_string()));
-        
-        // Test case 3: Port "1" + Speed "1G" → "ge-0/0/1" (<10G)
-        row_data.insert("Port".to_string(), "1".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "1".to_string());   // Will normalize to "1G"
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_ifname, Some("ge-0/0/1".to_string()));
-        assert_eq!(row.link_speed, Some("1G".to_string()));
-        
-        // Test case 4: Complex interface name should be preserved
-        row_data.insert("Port".to_string(), "xe-0/0/3".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25GB".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_ifname, Some("xe-0/0/3".to_string()));  // Preserved as-is
-        assert_eq!(row.link_speed, Some("25G".to_string()));
-        
-        // Test case 5: Missing speed should default to 1G (ge-)
-        row_data.insert("Port".to_string(), "7".to_string());
-        row_data.remove("Speed\n(GB)");
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some());
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_ifname, Some("ge-0/0/7".to_string()));  // Default 1G = ge-
-    }
-
-    #[test]
-    fn test_required_fields_filtering() {
-        // Test that rows without both switch_label and switch_ifname are filtered out
-        let mut row_data = HashMap::new();
-        let conversion_map = create_test_conversion_map();
-        let field_map = create_conversion_field_mapping(&create_test_headers(), &conversion_map.mappings);
-
-        // Case 1: Row with both switch_label and switch_ifname - should be kept
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Port".to_string(), "2".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_some(), "Row with both switch and port should be included");
-        let row = network_row.unwrap();
-        assert_eq!(row.switch_label, Some("switch01".to_string()));
-        assert_eq!(row.switch_ifname, Some("et-0/0/2".to_string()));
-
-        // Case 2: Row missing switch_label - should be filtered out
-        row_data.clear();
-        row_data.insert("Port".to_string(), "2".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_none(), "Row missing switch name should be filtered out");
-
-        // Case 3: Row missing switch_ifname - should be filtered out
-        row_data.clear();
-        row_data.insert("Switch Name".to_string(), "switch01".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_none(), "Row missing port should be filtered out");
-
-        // Case 4: Row missing both - should be filtered out
-        row_data.clear();
-        row_data.insert("Host Name".to_string(), "server01".to_string());
-        row_data.insert("Speed\n(GB)".to_string(), "25G".to_string());
-        
-        let network_row = convert_to_network_config_row(&row_data, &field_map);
-        assert!(network_row.is_none(), "Row missing both switch and port should be filtered out");
-    }
-
-    #[tokio::test]
-    async fn test_duplicate_detection() {
-        // Test that validate_data removes duplicates based on switch_label + switch_ifname
-        let mut data = Vec::new();
-        
-        // Create duplicate entries with same switch + interface
-        let row1 = NetworkConfigRow {
-            switch_label: Some("CRL01P24L10".to_string()),
-            switch_ifname: Some("et-0/0/2".to_string()),
-            server_label: Some("r2lb103960".to_string()),
-            server_ifname: Some("OCP Slot 2 Port 2".to_string()),
-            link_speed: Some("25G".to_string()),
-            ..Default::default()
-        };
-        
-        let row2 = NetworkConfigRow {
-            switch_label: Some("CRL01P24L10".to_string()),
-            switch_ifname: Some("et-0/0/2".to_string()),
-            server_label: Some("r2lb103959".to_string()),  // Different server
-            server_ifname: Some("OCP Slot 2 Port 2".to_string()),
-            link_speed: Some("25G".to_string()),
-            ..Default::default()
-        };
-        
-        let row3 = NetworkConfigRow {
-            switch_label: Some("CRL01P24L09".to_string()),
-            switch_ifname: Some("et-0/0/2".to_string()),  // Different switch, same interface
-            server_label: Some("r2lb103960".to_string()),
-            server_ifname: Some("OCP Slot 1 Port 2".to_string()),
-            link_speed: Some("25G".to_string()),
-            ..Default::default()
-        };
-        
-        data.push(row1);
-        data.push(row2);  // Duplicate of row1 (same switch + interface)
-        data.push(row3);  // Different switch, should be kept
-        
-        let result = validate_data(data).await.unwrap();
-        
-        assert_eq!(result.len(), 2, "Should have 2 unique combinations after deduplication");
-        
-        // Verify the correct combinations remain
-        let combinations: std::collections::HashSet<_> = result.iter()
-            .map(|row| (row.switch_label.as_ref().unwrap().as_str(), row.switch_ifname.as_ref().unwrap().as_str()))
-            .collect();
-            
-        assert!(combinations.contains(&("CRL01P24L10", "et-0/0/2")));
-        assert!(combinations.contains(&("CRL01P24L09", "et-0/0/2")));
-    }
+    String::new()
 }

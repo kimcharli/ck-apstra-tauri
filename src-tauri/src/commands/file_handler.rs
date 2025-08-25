@@ -3,7 +3,8 @@ use calamine::{Reader, Xlsx, open_workbook};
 use std::path::Path;
 
 #[command]
-pub async fn upload_excel_file(file_path: String) -> Result<Vec<String>, String> {
+pub async fn upload_excel_file(filePath: String) -> Result<Vec<String>, String> {
+    let file_path = filePath; // Convert to snake_case for internal use
     log::info!("Processing Excel file: {}", file_path);
     
     // Verify file exists and has .xlsx extension

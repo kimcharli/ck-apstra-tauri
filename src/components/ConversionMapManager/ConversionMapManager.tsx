@@ -140,7 +140,7 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
       if (!selected || Array.isArray(selected)) return;
 
       const filePath = selected as string;
-      const map = await invoke<ConversionMap>('load_conversion_map_from_file', { filePath });
+      const map = await invoke<ConversionMap>('load_conversion_map_from_file', { file_path: filePath });
       
       setConversionMap(map);
       setHeaderRow(map.header_row || 1);
@@ -183,7 +183,7 @@ const ConversionMapManager: React.FC<ConversionMapManagerProps> = ({
 
       await invoke('save_conversion_map_to_file', { 
         conversionMap: updatedMap, 
-        filePath: selected 
+        file_path: selected 
       });
       
     } catch (error) {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
-import { NetworkConfigRow, ConversionMap, ApstraConfig } from '../../types';
+import { NetworkConfigRow, ApstraConfig } from '../../types';
+import { EnhancedConversionMap } from '../../services/EnhancedConversionService';
 import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import FileUpload from '../FileUpload/FileUpload';
 import SheetSelector from '../SheetSelector/SheetSelector';
@@ -12,7 +13,7 @@ interface ProvisioningPageProps {
   isVisible: boolean;
   onClose: () => void;
   onNavigate: (page: 'home' | 'apstra-connection' | 'conversion-map' | 'provisioning' | 'tools') => void;
-  conversionMap?: ConversionMap | null;
+  conversionMap?: EnhancedConversionMap | null;
   apstraConfig?: ApstraConfig | null;
 }
 
@@ -42,7 +43,6 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
       sheets: loadedSheets 
     });
     logger.logFileOperation('Excel upload', loadedFilePath, 0, { sheets: loadedSheets });
-    console.log('Provisioning: Sheets loaded:', loadedSheets);
   };
 
   const handleSheetSelect = async (sheetName: string) => {
@@ -55,15 +55,12 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
         sheetName, 
         hasConversionMap: !!conversionMap 
       });
-      console.log('Provisioning: Parsing sheet:', sheetName, 'from file:', filePath);
-      console.log('Provisioning: Using conversion map:', conversionMap);
       const parsedData = await invoke<NetworkConfigRow[]>('parse_excel_sheet', { 
-        filePath, 
-        sheetName,
-        conversionMap: conversionMap 
+        filePath: filePath, 
+        sheetName: sheetName,
+        enhancedConversionMap: conversionMap 
       });
       
-      console.log('Provisioning: Parsed data rows:', parsedData?.length || 0);
       setTableData(parsedData || []);
       
       // Simulate blueprint validation
