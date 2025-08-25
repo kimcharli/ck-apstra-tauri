@@ -49,6 +49,7 @@ fn main() {
             apstra_is_authenticated,
             apstra_logout,
             apstra_dump_blueprint,
+            load_apstra_queries,
             send_backend_log,
             // Enhanced Conversion System Commands
             load_enhanced_conversion_map,

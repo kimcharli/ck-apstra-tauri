@@ -1,5 +1,35 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/tauri';
 import { NetworkConfigRow, ApstraConfig } from '../../types';
+
+// Enhanced conversion map types
+interface FieldDefinition {
+  display_name: string;
+  description: string;
+  data_type: string;
+  is_required: boolean;
+  is_key_field: boolean;
+  ui_config: {
+    column_width: number;
+    sortable: boolean;
+    filterable: boolean;
+    hidden: boolean;
+  };
+}
+
+interface EnhancedConversionMap {
+  version: string;
+  header_row: number;
+  field_definitions: Record<string, FieldDefinition>;
+}
+
+// Column definition for the table
+interface TableColumn {
+  key: keyof NetworkConfigRow;
+  header: string;
+  width: string;
+  sortable: boolean;
+}
 import { renderApstraSystemButtonWithLookup } from '../../utils/apstraLinkHelpers';
 import { getBlueprintIdByLabel } from '../../utils/blueprintMapping';
 import { apstraApiService } from '../../services/ApstraApiService';
@@ -47,12 +77,30 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   const [sortField, setSortField] = useState<keyof NetworkConfigRow | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filterText, setFilterText] = useState('');
+  const [conversionMap, setConversionMap] = useState<EnhancedConversionMap | null>(null);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
   const [comparisonSummary, setComparisonSummary] = useState<ComparisonSummary | null>(null);
   const [isComparingData, setIsComparingData] = useState(false);
   const [showComparisonResults, setShowComparisonResults] = useState(false);
   const [groupByServer, setGroupByServer] = useState(true);
   const [apiDataMap, setApiDataMap] = useState<Map<string, any>>(new Map());
+
+  // Load the enhanced conversion map on component mount
+  useEffect(() => {
+    const loadConversionMap = async () => {
+      try {
+        const map = await invoke<EnhancedConversionMap>('load_enhanced_conversion_map', {
+          filePath: null // Load default conversion map
+        });
+        setConversionMap(map);
+      } catch (error) {
+        console.error('Failed to load conversion map:', error);
+        // Fall back to the hard-coded columns if conversion map fails
+        setConversionMap(null);
+      }
+    };
+    loadConversionMap();
+  }, []);
 
   // Group connections by server to avoid scattering the same server's links
   const groupConnectionsByServer = (data: NetworkConfigRow[]): NetworkConfigRow[] => {
@@ -92,29 +140,106 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     return groupedData;
   };
 
-  // Enhanced column definitions with better headers and formatting
-  const columns = [
-    { key: 'switch_label', header: 'Switch\nName', width: '120px', sortable: true },
-    { key: 'switch_ifname', header: 'Switch\nInterface', width: '100px', sortable: true },
-    { key: 'server_label', header: 'Server\nName', width: '120px', sortable: true },
-    { key: 'server_ifname', header: 'Server\nInterface', width: '100px', sortable: true },
-    { key: 'link_speed', header: 'Link\nSpeed', width: '80px', sortable: true },
-    { key: 'is_external', header: 'External', width: '70px', sortable: true },
-    { key: 'link_group_ifname', header: 'LAG/Bond\nName', width: '100px', sortable: true },
-    { key: 'link_group_lag_mode', header: 'LAG\nMode', width: '80px', sortable: true },
-    { key: 'link_group_ct_names', header: 'Connectivity\nTemplate', width: '120px', sortable: true },
-    { key: 'server_tags', header: 'Server\nTags', width: '100px', sortable: false },
-    { key: 'link_tags', header: 'Link\nTags', width: '100px', sortable: false },
-    { key: 'comment', header: 'Comments', width: '150px', sortable: false }
-  ];
+  // Generate columns dynamically from conversion map or fallback to hard-coded
+  const columns: TableColumn[] = useMemo(() => {
+    if (conversionMap) {
+      // Generate columns from conversion map field_definitions
+      const fieldOrder = [
+        'switch_label', 'switch_ifname', 'server_label', 'server_ifname',
+        'link_speed', 'is_external', 'link_group_ifname', 'link_group_lag_mode',
+        'link_group_ct_names', 'server_tags', 'link_tags', 'comment'
+      ];
+      
+      return fieldOrder
+        .map(fieldKey => {
+          const fieldDef = conversionMap.field_definitions[fieldKey];
+          if (fieldDef && !fieldDef.ui_config.hidden) {
+            return {
+              key: fieldKey as keyof NetworkConfigRow,
+              header: fieldDef.display_name,
+              width: `${fieldDef.ui_config.column_width}px`,
+              sortable: fieldDef.ui_config.sortable
+            };
+          }
+          return null;
+        })
+        .filter((col): col is TableColumn => col !== null);
+    } else {
+      // Fallback to hard-coded columns if conversion map is not available
+      return [
+        { key: 'switch_label', header: 'Switch\nName', width: '120px', sortable: true },
+        { key: 'switch_ifname', header: 'Switch\nInterface', width: '100px', sortable: true },
+        { key: 'server_label', header: 'Server\nName', width: '120px', sortable: true },
+        { key: 'server_ifname', header: 'Server\nInterface', width: '100px', sortable: true },
+        { key: 'link_speed', header: 'Link\nSpeed', width: '80px', sortable: true },
+        { key: 'is_external', header: 'External', width: '70px', sortable: true },
+        { key: 'link_group_ifname', header: 'LAG/Bond\nName', width: '100px', sortable: true },
+        { key: 'link_group_lag_mode', header: 'LAG\nMode', width: '80px', sortable: true },
+        { key: 'link_group_ct_names', header: 'Connectivity\nTemplate', width: '120px', sortable: true },
+        { key: 'server_tags', header: 'Server\nTags', width: '100px', sortable: false },
+        { key: 'link_tags', header: 'Link\nTags', width: '100px', sortable: false },
+        { key: 'comment', header: 'Comments', width: '150px', sortable: false }
+      ];
+    }
+  }, [conversionMap]);
+
+  // Special LAG/Bond Name processing logic - MUST be defined before filteredAndSortedData useMemo
+  const processLagBondNames = React.useCallback((tableData: NetworkConfigRow[]): NetworkConfigRow[] => {
+    let nextLagNumber = 900; // Starting LAG number for auto-generation
+    const processedData = [...tableData];
+    
+    // Group connections that need LAG assignment (empty LAG name but lacp_active mode)
+    const lagGroups = new Map<string, NetworkConfigRow[]>();
+    
+    processedData.forEach((row, index) => {
+      // Check if this connection needs LAG name auto-generation
+      const needsLagName = !row.link_group_ifname && row.link_group_lag_mode === 'lacp_active';
+      
+      if (needsLagName) {
+        // Create a LAG group key based on server only
+        // All interfaces from the same server should share the same LAG regardless of switches
+        const lagGroupKey = `${row.server_label}`;
+        
+        if (!lagGroups.has(lagGroupKey)) {
+          lagGroups.set(lagGroupKey, []);
+        }
+        lagGroups.get(lagGroupKey)?.push({ ...row, __originalIndex: index } as any);
+      }
+    });
+    
+    // Assign the SAME LAG name to ALL connections in each group
+    lagGroups.forEach((connections, lagGroupKey) => {
+      const lagName = `ae${nextLagNumber}`;
+      nextLagNumber++;
+      
+      console.log(`🔗 Auto-generating LAG name "${lagName}" for ${connections.length} connections in group: ${lagGroupKey}`);
+      console.log(`   Interfaces: ${connections.map(c => `${c.switch_ifname}↔${c.server_ifname}`).join(', ')}`);
+      
+      // Apply the SAME LAG name to ALL connections in this group
+      connections.forEach(conn => {
+        const originalIndex = (conn as any).__originalIndex;
+        if (originalIndex !== undefined) {
+          processedData[originalIndex] = {
+            ...processedData[originalIndex],
+            link_group_ifname: lagName
+          };
+        }
+      });
+    });
+    
+    return processedData;
+  }, []);
 
   const filteredAndSortedData = useMemo(() => {
-    let filtered = data;
+    // First, process LAG/Bond Names (auto-generate for lacp_active connections without LAG names)
+    let processedData = processLagBondNames(data);
+    
+    let filtered = processedData;
 
     // Apply text filter
     if (filterText) {
       const searchText = filterText.toLowerCase();
-      filtered = data.filter(row => 
+      filtered = processedData.filter(row => 
         Object.values(row).some(value => 
           value?.toString().toLowerCase().includes(searchText)
         )
@@ -146,7 +271,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     }
 
     return filtered;
-  }, [data, filterText, sortField, sortDirection, groupByServer]);
+  }, [data, filterText, sortField, sortDirection, groupByServer, processLagBondNames]);
 
   const handleSort = (field: keyof NetworkConfigRow) => {
     if (sortField === field) {
@@ -249,6 +374,74 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     }
   };
 
+  // Synchronize LAG names from API data to Excel data
+  const synchronizeLagNamesFromApi = (tableData: NetworkConfigRow[], apiDataMap: Map<string, any>): NetworkConfigRow[] => {
+    const updatedData = [...tableData];
+    
+    // Group Excel connections by server to identify potential LAG groups
+    const serverLagGroups = new Map<string, NetworkConfigRow[]>();
+    
+    updatedData.forEach((row, index) => {
+      if (row.server_label) {
+        if (!serverLagGroups.has(row.server_label)) {
+          serverLagGroups.set(row.server_label, []);
+        }
+        serverLagGroups.get(row.server_label)?.push({ ...row, __index: index } as any);
+      }
+    });
+    
+    // For each server group, check if we should synchronize LAG names from API
+    serverLagGroups.forEach((lagConnections, serverLabel) => {
+      // Find API LAG names for connections that have API data
+      const apiLagNames = new Set<string>();
+      let hasApiLagData = false;
+      
+      lagConnections.forEach(row => {
+        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const apiData = apiDataMap.get(connectionKey);
+        
+        if (apiData) {
+          // Extract API LAG name from various possible paths
+          const apiLagName = apiData.ae1?.if_name || apiData.ae_interface?.name || '';
+          if (apiLagName) {
+            apiLagNames.add(apiLagName);
+            hasApiLagData = true;
+          }
+        }
+      });
+      
+      // Always update individual connections with their specific API LAG names
+      if (hasApiLagData) {
+        if (apiLagNames.size === 1) {
+          console.log(`✅ Server ${serverLabel} has consistent API LAG name: "${Array.from(apiLagNames)[0]}" (MATCH)`);
+        } else {
+          console.log(`❌ Server ${serverLabel} has inconsistent API LAG names: ${Array.from(apiLagNames).join(', ')} (MISMATCH)`);
+        }
+        
+        // Update each connection with its specific API LAG name
+        lagConnections.forEach(row => {
+          const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+          const apiData = apiDataMap.get(connectionKey);
+          const apiLagName = apiData?.ae1?.if_name || apiData?.ae_interface?.name || '';
+          
+          if (apiLagName) {
+            const originalIndex = (row as any).__index;
+            if (originalIndex !== undefined) {
+              const oldLagName = updatedData[originalIndex].link_group_ifname;
+              updatedData[originalIndex] = {
+                ...updatedData[originalIndex],
+                link_group_ifname: apiLagName
+              };
+              console.log(`  🔄 ${row.switch_ifname}: "${oldLagName}" → "${apiLagName}"`);
+            }
+          }
+        });
+      }
+    });
+    
+    return updatedData;
+  };
+
   const compareAndUpdateConnectivityData = (tableData: NetworkConfigRow[], apiResults: any[]): {
     comparisonResults: ComparisonResult[];
     newRowsAdded: number;
@@ -287,12 +480,32 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             switch_intf: existingData.rawData?.switch_intf || item.switch_intf,
             server_intf: existingData.rawData?.server_intf || item.server_intf,
             intf1: existingData.rawData?.intf1 || item.intf1,
-            intf2: existingData.rawData?.intf2 || item.intf2
+            intf2: existingData.rawData?.intf2 || item.intf2,
+            // Ensure LAG/aggregation fields are preserved from both chunks
+            ae1: existingData.rawData?.ae1 || item.ae1,
+            evpn1: existingData.rawData?.evpn1 || item.evpn1,
+            ct_names: existingData.rawData?.ct_names || item.ct_names,
+            ae_interface: existingData.rawData?.ae_interface || item.ae_interface
           };
           
           // If this chunk has speed data and the existing doesn't, use it
           if (item.link1?.speed && !existingData.rawData?.link1?.speed) {
             mergedRawData.link1 = { ...mergedRawData.link1, speed: item.link1.speed };
+          }
+          
+          // If this chunk has LAG/Bond Name data and the existing doesn't, use it
+          if (item.ae1?.if_name && !existingData.rawData?.ae1?.if_name) {
+            mergedRawData.ae1 = { ...mergedRawData.ae1, if_name: item.ae1.if_name };
+          }
+          
+          // If this chunk has LAG mode data and the existing doesn't, use it  
+          if (item.evpn1?.lag_mode && !existingData.rawData?.evpn1?.lag_mode) {
+            mergedRawData.evpn1 = { ...mergedRawData.evpn1, lag_mode: item.evpn1.lag_mode };
+          }
+          
+          // If this chunk has CT names and the existing doesn't, use it
+          if (item.ct_names && !existingData.rawData?.ct_names) {
+            mergedRawData.ct_names = item.ct_names;
           }
           
           console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
@@ -363,15 +576,11 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       }
       
       if (apiData) {
-        // Found a match - use unified field comparison function
-        const fieldMatches = compareFields(row, apiData);
-        
-
         results.push({
           status: 'match',
           tableRow: row,
           apiData: apiData,
-          fieldMatches: fieldMatches,
+          fieldMatches: {}, // Will be filled in after LAG group validation
           message: `✅ Connection found: ${switchName}[${switchInterface || 'N/A'}] ↔ ${serverName}[${serverInterface || 'N/A'}]`
         });
         apiConnectionsMap.delete(connectionKey); // Remove from map so we can find extras
@@ -398,8 +607,9 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         // Create new row for the extra connection found in API
         // Extract speed and other data from the merged API result
         const apiSpeed = apiData.rawData?.link1?.speed || '';
-        const apiLagMode = apiData.rawData?.lag_mode || '';
+        const apiLagMode = apiData.rawData?.evpn1?.lag_mode || apiData.rawData?.lag_mode || '';
         const apiCtNames = apiData.rawData?.ct_names || '';
+        const apiLagIfname = apiData.rawData?.ae1?.if_name || apiData.rawData?.ae_interface?.name || '';
         
         const newRow: NetworkConfigRow = {
           blueprint: 'DH4-Colo2', // Use the same blueprint we queried
@@ -410,7 +620,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
           link_speed: apiSpeed, // Populate from merged API data
           link_group_lag_mode: apiLagMode,
           link_group_ct_names: apiCtNames,
-          link_group_ifname: '',
+          link_group_ifname: apiLagIfname, // Populate from merged API data
           is_external: false,
           server_tags: '',
           switch_tags: '',
@@ -441,7 +651,21 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
 
     // Now combine original data with new rows and group by server
     const combinedData = [...tableData, ...newRows];
-    const groupedData = groupConnectionsByServer(combinedData);
+    
+    // Synchronize LAG names from API data to Excel data
+    const lagSynchronizedData = synchronizeLagNamesFromApi(combinedData, finalApiDataMap);
+    const groupedData = groupConnectionsByServer(lagSynchronizedData);
+
+    // Perform LAG group validation for connections with LAG names
+    const lagGroupValidation = validateLagGroupConsistency(lagSynchronizedData, finalApiDataMap);
+
+    // Update field matches for all results with LAG group validation
+    results.forEach(result => {
+      if (result.status === 'match' && result.tableRow && result.apiData) {
+        const fieldMatches = compareFields(result.tableRow, result.apiData, lagGroupValidation);
+        result.fieldMatches = fieldMatches;
+      }
+    });
 
     return {
       comparisonResults: results,
@@ -451,13 +675,72 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     };
   };
 
+
+  // LAG group comparison logic for API validation
+  const validateLagGroupConsistency = (excelConnections: NetworkConfigRow[], apiDataMap: Map<string, any>): Map<string, boolean> => {
+    const lagValidationResults = new Map<string, boolean>();
+    
+    // Group Excel connections by LAG name
+    const excelLagGroups = new Map<string, NetworkConfigRow[]>();
+    excelConnections.forEach(row => {
+      if (row.link_group_ifname) {
+        if (!excelLagGroups.has(row.link_group_ifname)) {
+          excelLagGroups.set(row.link_group_ifname, []);
+        }
+        excelLagGroups.get(row.link_group_ifname)?.push(row);
+      }
+    });
+    
+    // Validate each LAG group against API data
+    excelLagGroups.forEach((lagConnections, lagName) => {
+      const apiLagNames = new Set<string>();
+      let allConnectionsHaveApiData = true;
+      
+      lagConnections.forEach(row => {
+        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const apiData = apiDataMap.get(connectionKey);
+        
+        if (apiData) {
+          const apiLagIfname = apiData.ae1?.if_name || apiData.rawData?.ae1?.if_name || apiData.ae_interface?.name || apiData.rawData?.ae_interface?.name || '';
+          if (apiLagIfname) {
+            apiLagNames.add(apiLagIfname);
+          }
+        } else {
+          allConnectionsHaveApiData = false;
+        }
+      });
+      
+      // LAG group matches if:
+      // 1. All connections in the Excel LAG group have API data
+      // 2. All API connections in the group have the same LAG name
+      // 3. The API LAG name matches across all connections in the group
+      const lagGroupMatches = allConnectionsHaveApiData && apiLagNames.size === 1;
+      
+      lagConnections.forEach(row => {
+        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        lagValidationResults.set(connectionKey, lagGroupMatches);
+      });
+      
+      if (!lagGroupMatches) {
+        console.log(`🚨 LAG group "${lagName}" validation failed:`, {
+          excelConnections: lagConnections.length,
+          apiLagNames: Array.from(apiLagNames),
+          allHaveApiData: allConnectionsHaveApiData
+        });
+      }
+    });
+    
+    return lagValidationResults;
+  };
+
   // Unified field comparison function - single source of truth for all field matching logic
-  const compareFields = (row: NetworkConfigRow, apiData: any): {
+  const compareFields = (row: NetworkConfigRow, apiData: any, lagGroupValidation?: Map<string, boolean>): {
     server_label: boolean;
     server_ifname: boolean;
     link_speed: boolean;
     link_group_lag_mode: boolean;
     link_group_ct_names: boolean;
+    link_group_ifname: boolean;
     is_external: boolean;
   } => {
     if (!apiData) {
@@ -467,6 +750,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         link_speed: false,
         link_group_lag_mode: false,
         link_group_ct_names: false,
+        link_group_ifname: false,
         is_external: false
       };
     }
@@ -474,13 +758,25 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     // Extract API values with proper fallback paths
     const apiServerInterface = apiData.server_intf?.if_name || apiData.intf2?.if_name || apiData.serverInterface || '';
     const apiSpeedRaw = apiData.link1?.speed || apiData.rawData?.link1?.speed || '';
-    const apiLagMode = apiData.lag_mode || apiData.rawData?.lag_mode || '';
+    const apiLagMode = apiData.evpn1?.lag_mode || apiData.rawData?.evpn1?.lag_mode || apiData.lag_mode || apiData.rawData?.lag_mode || '';
     const apiCtNames = apiData.ct_names || apiData.rawData?.ct_names || '';
+    const apiLagIfname = apiData.ae1?.if_name || apiData.rawData?.ae1?.if_name || apiData.ae_interface?.name || apiData.rawData?.ae_interface?.name || '';
     const apiExternal = apiData.is_external || apiData.rawData?.is_external || false;
 
     // Normalize speeds for comparison
     const tableSpeedNormalized = normalizeSpeed(row.link_speed || '');
     const apiSpeedNormalized = normalizeSpeed(apiSpeedRaw);
+
+    // LAG/Bond Name comparison uses group validation logic
+    let lagIfnameMatches = false;
+    if (lagGroupValidation && row.link_group_ifname) {
+      // Use group validation results for LAG name matching
+      const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+      lagIfnameMatches = lagGroupValidation.get(connectionKey) || false;
+    } else {
+      // Fallback to simple field comparison for non-LAG connections
+      lagIfnameMatches = (row.link_group_ifname || '') === apiLagIfname;
+    }
 
     return {
       server_label: true, // Server exists in API data if we have apiData
@@ -488,6 +784,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       link_speed: tableSpeedNormalized === apiSpeedNormalized,
       link_group_lag_mode: (row.link_group_lag_mode || '') === apiLagMode,
       link_group_ct_names: (row.link_group_ct_names || '') === apiCtNames,
+      link_group_ifname: lagIfnameMatches,
       is_external: row.is_external === apiExternal
     };
   };

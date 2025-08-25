@@ -444,6 +444,96 @@ const sheets = await invoke<string[]>('upload_excel_file', { filePath });
 - Test parameter passing immediately when adding new Tauri commands
 - Check for "missing required key" errors as indicator of naming mismatch
 
+### LAG/Bond Name Processing Issues
+
+**CRITICAL DEBUGGING**: LAG/Bond Name auto-generation and group validation issues.
+
+**Symptoms**:
+- LAG names not auto-generated for lacp_active connections with empty LAG/Bond Name cells
+- LAG group validation showing mismatches when API data should match Excel data
+- LAG names being overwritten incorrectly or inconsistently
+- Color coding wrong for LAG/Bond Name fields after Fetch & Compare
+
+**Root Cause Patterns**:
+
+**1. Auto-Generation Not Triggering**:
+```typescript
+// Check these conditions:
+const needsLagName = !row.link_group_ifname && row.link_group_lag_mode === 'lacp_active';
+// Debug: Log this condition to verify it's true when expected
+console.log(`LAG auto-generation check:`, {
+  hasLagName: !!row.link_group_ifname,
+  lagMode: row.link_group_lag_mode,
+  needsGeneration: needsLagName
+});
+```
+
+**2. Group Validation Failing**:
+```typescript
+// Common issue: API data merging not working correctly
+const apiLagIfname = apiData.ae1?.if_name || apiData.rawData?.ae1?.if_name || '';
+// Debug: Check if ae1.if_name data is being preserved during API merging
+console.log(`LAG validation debug:`, {
+  apiData: apiData,
+  hasAe1: !!apiData.ae1,
+  ae1IfName: apiData.ae1?.if_name,
+  rawDataAe1: apiData.rawData?.ae1?.if_name
+});
+```
+
+**3. Group Inconsistency Issues**:
+```typescript
+// Debug LAG group validation
+console.log(`🚨 LAG group "${lagName}" validation failed:`, {
+  excelConnections: lagConnections.length,
+  apiLagNames: Array.from(apiLagNames),
+  allHaveApiData: allConnectionsHaveApiData
+});
+```
+
+**Debugging Steps**:
+1. **Verify Auto-Generation**: Check that empty LAG names with lacp_active mode get auto-generated LAG names
+2. **Check API Merging**: Ensure `ae1.if_name` data is preserved during multi-chunk API merging
+3. **Validate Group Logic**: Verify LAG group validation logic matches the intended behavior
+4. **Test Fixture Scenario**: Use Excel fixture rows 7-8 to test LAG group scenarios
+
+**Common Fixes**:
+
+**Fix 1: Auto-Generation Not Working**:
+```typescript
+// Ensure processLagBondNames is called in the data pipeline
+const processedData = processLagBondNames(data); // Must be called first
+```
+
+**Fix 2: API Data Missing ae1.if_name**:
+```typescript
+// Verify multi-chunk merging preserves LAG data
+ae1: existingData.rawData?.ae1 || item.ae1,
+if (item.ae1?.if_name && !existingData.rawData?.ae1?.if_name) {
+  mergedRawData.ae1 = { ...mergedRawData.ae1, if_name: item.ae1.if_name };
+}
+```
+
+**Fix 3: Group Validation Logic Error**:
+```typescript
+// Ensure group validation is called with correct parameters
+const lagGroupValidation = validateLagGroupConsistency(combinedData, finalApiDataMap);
+const fieldMatches = compareFields(result.tableRow, result.apiData, lagGroupValidation);
+```
+
+**Prevention**:
+- Always test LAG processing with fixture Excel data (rows 7-8)
+- Verify that auto-generated LAG names appear in the provisioning table
+- Check that LAG group validation works correctly with API data
+- Test color coding for LAG/Bond Name fields shows correct match/mismatch states
+
+**Testing Commands**:
+```bash
+# Test with debug logging to see LAG processing
+RUST_LOG=debug npm run tauri:dev
+# Look for console logs starting with "🔗 Auto-generating LAG name" and "🚨 LAG group"
+```
+
 ### React Blank Page Issue
 
 **CRITICAL DEBUGGING**: React application not rendering despite dev server running normally.

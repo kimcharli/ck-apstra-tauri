@@ -59,39 +59,18 @@ This document outlines the implemented core features of the Apstra Network Confi
 
 **Regression Prevention**: This prevents issues like "Port" column being incorrectly mapped to "Trunk/Access Port" column due to partial matching. The exact match "Port" → `switch_ifname` will always take priority over partial matches.
 
-### Conversion Mapping System
+### Enhanced Conversion Mapping System
 
-**CRITICAL FEATURE**: The application supports fully dynamic, customer-configurable conversion maps without requiring code changes or recompilation.
+**CRITICAL FEATURE**: The application uses a comprehensive Enhanced Conversion Map system for dynamic field mapping, transformations, and validation.
 
-**Three-Tier Fallback System**:
-1. **User-provided conversion map** (highest priority) - Runtime JSON configuration
-2. **Default conversion map** from `data/default_conversion_map.json`
-3. **Built-in fallback logic** with common field variations (lowest priority)
+**📖 Complete Documentation**: See **[Enhanced Conversion Map System](enhanced-conversion-map.md)** for comprehensive specification, implementation details, and usage patterns.
 
-**JSON Configuration Format**:
-```json
-{
-    "header_row": 2,
-    "mappings": {
-        "Switch Name": "switch_label",
-        "Port": "switch_ifname", 
-        "Host Name": "server_label",
-        "Slot/Port": "server_ifname",
-        "Custom Field": "target_field"
-    }
-}
-```
-
-**File Locations**:
-- **Default**: `data/default_conversion_map.json` (embedded in application)
-- **User Custom**: App data directory `/conversion_maps/user_conversion_map.json`
-- **Project Specific**: Any file path via `ConversionService::load_conversion_map_from_file()`
-
-**Intelligent Header Matching**:
-- **Specificity Priority**: Longer header matches processed first (`"Slot/Port"` before `"Slot"`)
-- **Normalization**: Case-insensitive, whitespace-normalized, line break handling (`\r\n`)
-- **Exact + Partial Matching**: Supports both precise matches and flexible partial matching
-- **Conflict Prevention**: Already-mapped fields protected from less-specific overwrites
+**Key Capabilities**:
+- **Dynamic Field Mapping**: Excel headers → internal fields with priority-based matching
+- **Built-in Transformations**: Speed normalization ("25GB" → "25G"), interface name generation
+- **Validation Rules**: Field-specific validation with custom patterns and constraints
+- **UI Configuration**: Column widths, sorting, filtering controlled via conversion map
+- **API Integration**: Automatic data extraction from Apstra API responses
 
 ### Data Validation Rules
 - **Conversion-Based Mapping**: Use conversion maps to translate Excel headers to internal field names
@@ -291,56 +270,280 @@ let merge_enabled_columns: std::collections::HashSet<&str> = [
 
 **ESSENTIAL IMPLEMENTATION**: The application must properly merge multiple API result chunks for the same connection due to Apstra's graph query structure with optional sections.
 
-**Problem Context**:
-Apstra's connectivity graph query with optional sections returns the same logical connection across multiple result items. Each result chunk may contain different pieces of information:
-- Chunk 1: Basic connection (switch, server, interface names)  
-- Chunk 2: Speed data (`link1.speed`)
-- Chunk 3: LAG mode and connectivity templates
-- Additional chunks: External connectivity, redundancy group data
+**Fundamental Architecture Problem**:
+Apstra's connectivity graph queries use optional sections that create multiple result entries for the same logical network connection. This is NOT a bug - it's how Apstra's graph query engine works with optional data paths.
 
-**Critical Implementation** in `ProvisioningTable.tsx`:
+**Real-World Example**:
+For a single connection (switch1 → server1, port et-0/0/1), the API may return:
+
+```javascript
+// Result chunk 1: Basic connection info
+{
+  switch: { label: "switch1" },
+  server: { label: "server1" },
+  switch_intf: { if_name: "et-0/0/1" },
+  server_intf: { if_name: "ens8" }
+  // No speed, LAG, or CT data yet
+}
+
+// Result chunk 2: Speed information (from optional link speed section)
+{
+  switch: { label: "switch1" },
+  server: { label: "server1" },
+  link1: { speed: "25G" }
+  // Same connection, different data chunk
+}
+
+// Result chunk 3: LAG configuration (from optional aggregation section)
+{
+  switch: { label: "switch1" },
+  server: { label: "server1" },
+  ae1: { if_name: "ae0" },
+  evpn1: { lag_mode: "lacp_active" }
+  // Same connection, LAG-specific data
+}
+
+// Result chunk 4: Connectivity templates (from optional CT section)
+{
+  switch: { label: "switch1" },
+  server: { label: "server1" },
+  ct_names: "DC-Fabric-CT,Storage-CT"
+  // Same connection, CT data
+}
+```
+
+**Why This Happens**:
+- Apstra graph queries with optional sections (`optional { ... }`) generate separate result chunks
+- Each optional section that matches creates a new result item
+- All chunks represent the same logical connection with different data facets
+- **Missing any chunk means missing critical data fields**
+
+**Required Merging Algorithm** in `ProvisioningTable.tsx`:
 
 ```typescript
-// REQUIRED: Multi-chunk merging algorithm
-apiResults.forEach(item => {
-  const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
-  const existingData = apiConnectionsMap.get(connectionKey);
+// CRITICAL: Comprehensive multi-chunk merging
+const mergedRawData = {
+  ...existingData.rawData,
+  ...item,
+  // Preserve ALL critical object structures from both chunks
+  link1: existingData.rawData?.link1 || item.link1,
+  switch: existingData.rawData?.switch || item.switch,
+  server: existingData.rawData?.server || item.server,
+  switch_intf: existingData.rawData?.switch_intf || item.switch_intf,
+  server_intf: existingData.rawData?.server_intf || item.server_intf,
+  intf1: existingData.rawData?.intf1 || item.intf1,
+  intf2: existingData.rawData?.intf2 || item.intf2,
   
-  if (existingData) {
-    // Merge all fields from both chunks - preserve all data
-    const mergedRawData = {
-      ...existingData.rawData,
-      ...item,
-      // Ensure critical fields are preserved from both chunks
-      link1: existingData.rawData?.link1 || item.link1,
-      switch: existingData.rawData?.switch || item.switch,
-      server: existingData.rawData?.server || item.server,
-    };
-    
-    // Speed data preservation is CRITICAL
-    if (item.link1?.speed && !existingData.rawData?.link1?.speed) {
-      mergedRawData.link1 = { ...mergedRawData.link1, speed: item.link1.speed };
-    }
-    
-    apiConnectionsMap.set(connectionKey, {
-      switchName, serverName, switchInterface, serverInterface,
-      rawData: mergedRawData // Complete merged data
-    });
-  }
+  // LAG/aggregation fields - CRITICAL for ae1.if_name mapping
+  ae1: existingData.rawData?.ae1 || item.ae1,
+  evpn1: existingData.rawData?.evpn1 || item.evpn1,
+  ct_names: existingData.rawData?.ct_names || item.ct_names,
+  ae_interface: existingData.rawData?.ae_interface || item.ae_interface
+};
+
+// Field-level merging for partial data structures
+if (item.link1?.speed && !existingData.rawData?.link1?.speed) {
+  mergedRawData.link1 = { ...mergedRawData.link1, speed: item.link1.speed };
+}
+
+if (item.ae1?.if_name && !existingData.rawData?.ae1?.if_name) {
+  mergedRawData.ae1 = { ...mergedRawData.ae1, if_name: item.ae1.if_name };
+}
+
+if (item.evpn1?.lag_mode && !existingData.rawData?.evpn1?.lag_mode) {
+  mergedRawData.evpn1 = { ...mergedRawData.evpn1, lag_mode: item.evpn1.lag_mode };
+}
+
+if (item.ct_names && !existingData.rawData?.ct_names) {
+  mergedRawData.ct_names = item.ct_names;
+}
+```
+
+**Critical Data Paths That Require Merging**:
+- **Basic Connection**: `switch.label`, `server.label`, `switch_intf.if_name`, `server_intf.if_name`
+- **Speed Data**: `link1.speed` (may appear in any chunk)
+- **LAG/Bond Data**: `ae1.if_name` (may appear in separate chunk from basic connection)
+- **LAG Mode**: `evpn1.lag_mode` (may appear with or without ae1 data)
+- **Connectivity Templates**: `ct_names` (may appear independently)
+- **External Status**: `is_external` (may appear in separate chunk)
+
+**Connection Key Strategy**:
+```typescript
+// REQUIRED: Use consistent connection key across all chunks
+const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
+// This key must identify the SAME logical connection across multiple chunks
+```
+
+**Critical Implementation Locations**:
+- **File**: `src/components/ProvisioningTable/ProvisioningTable.tsx`
+- **Function**: `compareAndUpdateConnectivityData()` 
+- **Lines**: ~350-400 (merging logic)
+- **Lines**: ~550-570 (field extraction for comparison)
+
+**NEVER Rules** (Prevent Data Loss):
+- ❌ **NEVER** overwrite API result chunks without merging - causes complete data loss
+- ❌ **NEVER** assume first API result contains all connection data
+- ❌ **NEVER** ignore subsequent chunks for the same connection key  
+- ❌ **NEVER** leave "Only in Blueprint" connections with empty critical fields
+- ❌ **NEVER** use `apiConnectionsMap.delete()` before capturing final React state
+- ❌ **NEVER** assume `ae1.if_name` appears in the same chunk as basic connection info
+- ❌ **NEVER** assume `link1.speed` appears in the first chunk
+- ❌ **NEVER** modify merging logic without testing with real multi-chunk API responses
+
+**ALWAYS Rules** (Ensure Complete Data):
+- ✅ **ALWAYS** merge all API result chunks for the same connection key
+- ✅ **ALWAYS** preserve existing data when adding new chunk data
+- ✅ **ALWAYS** use field-level merging for partial object structures  
+- ✅ **ALWAYS** populate new provisioning table rows with complete merged API data
+- ✅ **ALWAYS** test with API responses that have 3+ chunks per connection
+- ✅ **ALWAYS** log merging operations for debugging multi-chunk scenarios
+- ✅ **ALWAYS** validate that critical fields (speed, LAG name, LAG mode) appear correctly
+- ✅ **ALWAYS** capture ALL merged data before any `Map.delete()` operations
+
+**Debugging Multi-Chunk Issues**:
+```typescript
+console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
+  existing: existingData.rawData,
+  new: item,
+  merged: mergedRawData,
+  hasSpeed: !!mergedRawData.link1?.speed,
+  hasLagName: !!mergedRawData.ae1?.if_name,
+  hasLagMode: !!mergedRawData.evpn1?.lag_mode
 });
 ```
 
-**NEVER Rules**:
-- ❌ **NEVER** overwrite API result chunks without merging - causes data loss
-- ❌ **NEVER** assume first API result contains all connection data  
-- ❌ **NEVER** ignore speed data from secondary chunks
-- ❌ **NEVER** leave "Only in Blueprint" connections with empty speed fields
-
-**ALWAYS Rules**:
-- ✅ **ALWAYS** merge all API result chunks for same connection key
+**Validation Tests**:
+After any changes to merging logic, verify:
+1. Speed data appears in provisioning table Link Speed column
+2. LAG/Bond Name data appears and matches when present
+3. LAG Mode shows correct values (lacp_active, none, static)
+4. Color coding works correctly for matched/mismatched fields
+5. "Only in Blueprint" connections show complete data, not empty fields
 - ✅ **ALWAYS** preserve speed data from any chunk that contains it
 - ✅ **ALWAYS** populate new provisioning table rows with merged API data
 - ✅ **ALWAYS** test provisioning table shows complete speed information
+
+**Validation**: Speed data must appear in provisioning table Link Speed column and be properly color-coded for match/mismatch/blueprint-only status.
+
+### CRITICAL: LAG/Bond Name Processing and Group Validation
+
+**ESSENTIAL IMPLEMENTATION**: The application implements sophisticated LAG/Bond Name processing that handles auto-generation, group validation, and API comparison for network link aggregation scenarios.
+
+**Fundamental LAG Processing Architecture**:
+LAG/Bond Name processing is special because it operates on groups of connections rather than individual fields. Multiple network interfaces can belong to the same LAG group and must be validated collectively for consistency.
+
+**Auto-Generation Logic**:
+```typescript
+// When Excel cell is empty but LAG Mode is "lacp_active"
+const needsLagName = !row.link_group_ifname && row.link_group_lag_mode === 'lacp_active';
+
+// Group connections by server-switch pair
+const lagGroupKey = `${row.server_label}-${row.switch_label}`;
+
+// Assign sequential LAG names starting from ae900
+const lagName = `ae${nextLagNumber}`; // ae900, ae901, ae902, etc.
+```
+
+**Real-World LAG Scenario**:
+```
+Excel Input (rows 7-8 from fixture):
+Row 7: server1-switch1-et-0/0/1, LAG Mode: lacp_active, LAG Name: [empty] → Auto-generated: ae900
+Row 8: server1-switch1-et-0/0/2, LAG Mode: lacp_active, LAG Name: [empty] → Auto-generated: ae900
+
+API Response (multiple chunks):
+Chunk 1: server1-switch1-et-0/0/1, ae1: { if_name: "ae0" }
+Chunk 2: server1-switch1-et-0/0/2, ae1: { if_name: "ae0" }
+Result: Both Excel connections (ae900) match both API connections (ae0) = LAG GROUP MATCH
+```
+
+**Group Validation Algorithm**:
+```typescript
+// Group Excel connections by LAG name
+const excelLagGroups = new Map<string, NetworkConfigRow[]>();
+
+// For each LAG group, validate against API data
+excelLagGroups.forEach((lagConnections, lagName) => {
+  const apiLagNames = new Set<string>();
+  
+  lagConnections.forEach(row => {
+    const apiData = apiDataMap.get(connectionKey);
+    const apiLagIfname = apiData.ae1?.if_name || apiData.ae_interface?.name || '';
+    if (apiLagIfname) apiLagNames.add(apiLagIfname);
+  });
+  
+  // LAG group matches if all API connections have same LAG name
+  const lagGroupMatches = allConnectionsHaveApiData && apiLagNames.size === 1;
+});
+```
+
+**LAG Group Match Criteria**:
+1. **All Excel connections** in the LAG group must have corresponding API data
+2. **All API connections** in the group must have the same LAG name  
+3. **Consistency across group**: If Excel rows 7-8 both have "ae900", and API returns both with "ae0", it's a match
+4. **Group-level validation**: Individual field comparison is replaced with group consistency validation
+
+**Auto-Generation Rules**:
+- **Trigger**: Excel cell empty AND LAG Mode is "lacp_active"
+- **Grouping**: Server-switch pairs get same LAG name (server1-switch1 → ae900)  
+- **Sequential**: Each new server-switch pair gets next number (server2-switch1 → ae901)
+- **Preservation**: User-provided LAG names are never overwritten
+- **Scope**: Only applies to lacp_active connections, not static or none modes
+
+**API Comparison Logic**:
+```typescript
+// Group validation replaces simple field comparison
+const lagIfnameMatches = lagGroupValidation.get(connectionKey) || false;
+
+// Fallback to simple comparison for non-LAG connections
+if (!lagGroupValidation && !row.link_group_ifname) {
+  lagIfnameMatches = (row.link_group_ifname || '') === apiLagIfname;
+}
+```
+
+**Critical Implementation Locations**:
+- **File**: `src/components/ProvisioningTable/ProvisioningTable.tsx`
+- **Auto-Generation**: `processLagBondNames()` function (~lines 560-590)
+- **Group Validation**: `validateLagGroupConsistency()` function (~lines 594-650)
+- **Integration**: `filteredAndSortedData` useMemo (~line 188)
+- **API Comparison**: `compareAndUpdateConnectivityData()` function (~lines 541-549)
+
+**NEVER Rules** (Prevent LAG Processing Failures):
+- ❌ **NEVER** use simple field comparison for LAG names with group validation enabled
+- ❌ **NEVER** overwrite user-provided LAG names with auto-generated ones
+- ❌ **NEVER** validate LAG groups individually instead of collectively
+- ❌ **NEVER** assume LAG connections appear in sequential order in Excel or API
+- ❌ **NEVER** ignore group consistency when API returns different LAG names for same Excel group
+- ❌ **NEVER** auto-generate LAG names for non-lacp_active connections
+- ❌ **NEVER** modify LAG processing without testing with fixture rows 7-8 scenario
+
+**ALWAYS Rules** (Ensure LAG Processing Integrity):
+- ✅ **ALWAYS** auto-generate sequential LAG names for empty lacp_active connections
+- ✅ **ALWAYS** validate LAG groups collectively, not individually
+- ✅ **ALWAYS** preserve user-provided LAG names in Excel input
+- ✅ **ALWAYS** group connections by server-switch pairs for LAG assignment
+- ✅ **ALWAYS** use group validation results for LAG field matching
+- ✅ **ALWAYS** test with Excel connections that should have same LAG name
+- ✅ **ALWAYS** validate that API data merging works correctly with LAG data chunks
+- ✅ **ALWAYS** log LAG group validation results for debugging
+
+**Debugging LAG Processing**:
+```typescript
+console.log(`🔗 Auto-generating LAG name "${lagName}" for ${connections.length} connections`);
+console.log(`🚨 LAG group "${lagName}" validation failed:`, {
+  excelConnections: lagConnections.length,
+  apiLagNames: Array.from(apiLagNames),
+  allHaveApiData: allConnectionsHaveApiData
+});
+```
+
+**Integration with Multi-Chunk API Merging**:
+LAG processing must work correctly with the multi-chunk API merging system since `ae1.if_name` data may appear in different API result chunks than basic connection information.
+
+**Visual Feedback for LAG Groups**:
+- **Green**: All connections in LAG group match same API LAG name
+- **Red**: LAG group has inconsistent API LAG names or missing connections  
+- **Orange**: Entire LAG group missing from API data
+- **Blue**: LAG group exists only in API (added from "Only in Blueprint")
 
 **Validation**: Speed data must appear in provisioning table Link Speed column and be properly color-coded for match/mismatch/blueprint-only status.
 

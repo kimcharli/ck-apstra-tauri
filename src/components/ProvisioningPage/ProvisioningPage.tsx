@@ -6,6 +6,7 @@ import NavigationHeader from '../NavigationHeader/NavigationHeader';
 import FileUpload from '../FileUpload/FileUpload';
 import SheetSelector from '../SheetSelector/SheetSelector';
 import ProvisioningTable from '../ProvisioningTable/ProvisioningTable';
+import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { logger } from '../../services/LoggingService';
 import './ProvisioningPage.css';
 
@@ -47,48 +48,85 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
 
   const handleSheetSelect = async (sheetName: string) => {
     logger.logButtonClick(`Sheet Selection: ${sheetName}`, 'ProvisioningPage');
+    console.log('✅ Sheet selection started:', sheetName);
     setSelectedSheet(sheetName);
     setIsLoadingData(true);
     
     try {
+      console.log('✅ Invoking parse_excel_sheet with:', { filePath, sheetName, hasConversionMap: !!conversionMap });
       logger.logWorkflowStep('Network Provisioning', 2, 'Sheet selected and parsing data', { 
         sheetName, 
         hasConversionMap: !!conversionMap 
       });
+      
       const parsedData = await invoke<NetworkConfigRow[]>('parse_excel_sheet', { 
         filePath: filePath, 
         sheetName: sheetName,
         enhancedConversionMap: conversionMap 
       });
       
-      setTableData(parsedData || []);
+      console.log('✅ Excel parsing completed:', {
+        dataLength: parsedData?.length || 0,
+        isArray: Array.isArray(parsedData),
+        firstRow: parsedData?.[0]
+      });
       
-      // Simulate blueprint validation
-      if (parsedData && parsedData.length > 0) {
-        const uniqueDevices = new Set([...parsedData.map(row => row.switch_label), ...parsedData.map(row => row.server_label)]);
+      // Defensive null/undefined handling
+      const safeData = Array.isArray(parsedData) ? parsedData : [];
+      setTableData(safeData);
+      
+      // Simulate blueprint validation with safe data
+      if (safeData.length > 0) {
+        // Safe extraction of device names with fallback
+        const switchLabels = safeData
+          .map(row => row?.switch_label)
+          .filter((label): label is string => typeof label === 'string' && label.length > 0);
+        const serverLabels = safeData
+          .map(row => row?.server_label)
+          .filter((label): label is string => typeof label === 'string' && label.length > 0);
+        
+        const uniqueDevices = new Set([...switchLabels, ...serverLabels]);
         setBlueprintValidation({found: uniqueDevices.size, total: uniqueDevices.size});
         
+        console.log('✅ Blueprint validation completed:', {
+          dataRows: safeData.length,
+          uniqueDevices: uniqueDevices.size,
+          switchCount: switchLabels.length,
+          serverCount: serverLabels.length
+        });
+        
         logger.logDataChange('ProvisioningData', 'loaded', null, {
-          rowCount: parsedData.length,
+          rowCount: safeData.length,
           uniqueDevices: uniqueDevices.size,
           sheetName: sheetName
         });
         logger.logWorkflowStep('Network Provisioning', 3, 'Data parsed and blueprint validation completed', {
-          dataRows: parsedData.length,
+          dataRows: safeData.length,
           uniqueDevices: uniqueDevices.size,
           blueprintValidation: {found: uniqueDevices.size, total: uniqueDevices.size}
         });
+      } else {
+        console.log('⚠️ No data rows found in parsed result');
+        setBlueprintValidation(null);
       }
     } catch (error: any) {
-      console.error('Failed to parse sheet data:', error);
+      console.error('❌ Failed to parse sheet data:', error);
       logger.logError('DATA_CHANGE', 'Excel sheet parsing failed', { 
         sheetName, 
         filePath, 
-        error: error.toString() 
+        error: error.toString(),
+        stack: error.stack
       });
+      
+      // Ensure we set empty array on error to maintain UI state
       setTableData([]);
+      setBlueprintValidation(null);
+      
+      // Alert user of the specific error
+      alert(`Failed to parse sheet "${sheetName}": ${error.message || error.toString()}`);
     } finally {
       setIsLoadingData(false);
+      console.log('✅ Sheet selection completed, loading state cleared');
     }
   };
 
@@ -141,9 +179,19 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
   };
 
   const getDataSummary = () => {
-    const servers = new Set(tableData.map(row => row.server_label)).size;
-    const switches = new Set(tableData.map(row => row.switch_label)).size;
-    return { lines: tableData.length, servers, switches };
+    // Safe data extraction with null checks
+    const safeData = Array.isArray(tableData) ? tableData : [];
+    const servers = new Set(
+      safeData
+        .map(row => row?.server_label)
+        .filter((label): label is string => typeof label === 'string' && label.length > 0)
+    ).size;
+    const switches = new Set(
+      safeData
+        .map(row => row?.switch_label)
+        .filter((label): label is string => typeof label === 'string' && label.length > 0)
+    ).size;
+    return { lines: safeData.length, servers, switches };
   };
 
   const scrollToBottom = () => {
@@ -280,13 +328,34 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           </div>
 
           <div className="provisioning-table-container">
-            <ProvisioningTable 
-              data={tableData} 
-              isLoading={isLoadingData}
-              onProvision={handleProvisionData}
-              onDataUpdate={setTableData}
-              apstraConfig={apstraConfig}
-            />
+            <ErrorBoundary fallback={
+              <div style={{ 
+                padding: '20px', 
+                textAlign: 'center', 
+                backgroundColor: '#fff3cd', 
+                color: '#856404',
+                border: '1px solid #ffeaa7',
+                borderRadius: '4px',
+                margin: '10px 0'
+              }}>
+                <h3>⚠️ Table Rendering Error</h3>
+                <p>The provisioning table encountered an error. This may be due to:</p>
+                <ul style={{ textAlign: 'left', display: 'inline-block' }}>
+                  <li>Invalid Excel data format</li>
+                  <li>Missing required fields</li>
+                  <li>Data processing issues</li>
+                </ul>
+                <p>Try selecting a different sheet or re-uploading the Excel file.</p>
+              </div>
+            }>
+              <ProvisioningTable 
+                data={tableData} 
+                isLoading={isLoadingData}
+                onProvision={handleProvisionData}
+                onDataUpdate={setTableData}
+                apstraConfig={apstraConfig}
+              />
+            </ErrorBoundary>
           </div>
         </>
       )}

@@ -17,6 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest --watch",
     "test:provisioning": "vitest run --reporter=verbose src/components/ProvisioningTable",
+    "test:dom": "vitest run src/__tests__/ProvisioningPage.DOM.test.tsx --reporter=verbose",
+    "test:blank-page": "node test-dom-rendering.js",
     "test:rust": "cd src-tauri && cargo test",
     "test:integration": "cd src-tauri && cargo test --test '*'",
     "lint": "tsc --noEmit",

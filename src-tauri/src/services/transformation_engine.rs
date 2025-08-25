@@ -44,6 +44,14 @@ impl TransformationEngine {
             })
         );
 
+        // LAG mode conversion
+        self.functions.insert(
+            "lag_mode_conversion".to_string(),
+            Box::new(|input: &str, _context: Option<&HashMap<String, String>>| {
+                Ok(Self::convert_lag_mode_value(input))
+            })
+        );
+
         // String cleaning functions
         self.functions.insert(
             "trim_whitespace".to_string(),
@@ -81,7 +89,7 @@ impl TransformationEngine {
         }
 
         match &rule.logic {
-            TransformationLogic::ValueMap(value_map) => {
+            TransformationLogic::ValueMap { mappings: value_map } => {
                 // Direct value mapping
                 if let Some(mapped_value) = value_map.get(input) {
                     Ok(mapped_value.clone())
@@ -96,11 +104,11 @@ impl TransformationEngine {
                     Ok(input.to_string()) // Return original if no mapping found
                 }
             }
-            TransformationLogic::Template(template) => {
+            TransformationLogic::Template { template } => {
                 // Template-based transformation
                 self.apply_template_transformation(template, input, context)
             }
-            TransformationLogic::Function(function_name) => {
+            TransformationLogic::Function { name: function_name } => {
                 // Custom function call
                 if let Some(func) = self.functions.get(function_name) {
                     func(input, context)
@@ -108,7 +116,7 @@ impl TransformationEngine {
                     Err(format!("Unknown transformation function: {}", function_name))
                 }
             }
-            TransformationLogic::Pipeline(steps) => {
+            TransformationLogic::Pipeline { steps } => {
                 // Multi-step transformation pipeline
                 let mut current_value = input.to_string();
                 for step in steps {
@@ -336,6 +344,23 @@ impl TransformationEngine {
         }
     }
 
+    fn convert_lag_mode_value(input: &str) -> String {
+        if input.is_empty() {
+            return input.to_string();
+        }
+
+        let input_clean = input.trim().to_lowercase();
+        
+        match input_clean.as_str() {
+            "yes" | "y" | "true" | "1" => "lacp_active".to_string(),
+            "no" | "n" | "false" | "0" => "none".to_string(),
+            // If already a valid LAG mode, return as-is
+            "lacp_active" | "static" | "none" => input_clean,
+            "lacp" => "lacp_active".to_string(), // Convert legacy format
+            _ => input.to_string() // Return original if unrecognized
+        }
+    }
+
     pub fn register_custom_function<F>(&mut self, name: String, function: F) 
     where 
         F: Fn(&str, Option<&HashMap<String, String>>) -> Result<String, String> + Send + Sync + 'static 
@@ -345,23 +370,23 @@ impl TransformationEngine {
 
     pub fn validate_transformation_rule(&self, rule: &TransformationRule) -> Result<(), String> {
         match &rule.logic {
-            TransformationLogic::Function(function_name) => {
+            TransformationLogic::Function { name: function_name } => {
                 if !self.functions.contains_key(function_name) {
                     return Err(format!("Unknown transformation function: {}", function_name));
                 }
             }
-            TransformationLogic::Template(template) => {
+            TransformationLogic::Template { template } => {
                 // Basic template validation - ensure it has valid placeholders
                 if template.is_empty() {
                     return Err("Template cannot be empty".to_string());
                 }
             }
-            TransformationLogic::ValueMap(mappings) => {
+            TransformationLogic::ValueMap { mappings } => {
                 if mappings.is_empty() {
                     return Err("Value map cannot be empty".to_string());
                 }
             }
-            TransformationLogic::Pipeline(steps) => {
+            TransformationLogic::Pipeline { steps } => {
                 if steps.is_empty() {
                     return Err("Pipeline cannot be empty".to_string());
                 }
@@ -430,6 +455,35 @@ mod tests {
     }
 
     #[test]
+    fn test_lag_mode_conversion() {
+        assert_eq!(TransformationEngine::convert_lag_mode_value("Yes"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("yes"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("Y"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("y"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("true"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("1"), "lacp_active");
+        
+        assert_eq!(TransformationEngine::convert_lag_mode_value("No"), "none");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("no"), "none");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("N"), "none");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("n"), "none");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("false"), "none");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("0"), "none");
+        
+        // Legacy format conversion
+        assert_eq!(TransformationEngine::convert_lag_mode_value("lacp"), "lacp_active");
+        
+        // Already correct values
+        assert_eq!(TransformationEngine::convert_lag_mode_value("lacp_active"), "lacp_active");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("static"), "static");
+        assert_eq!(TransformationEngine::convert_lag_mode_value("none"), "none");
+        
+        // Unrecognized values pass through
+        assert_eq!(TransformationEngine::convert_lag_mode_value("unknown"), "unknown");
+        assert_eq!(TransformationEngine::convert_lag_mode_value(""), "");
+    }
+
+    #[test]
     fn test_value_mapping_transformation() {
         let engine = TransformationEngine::new();
         
@@ -442,7 +496,7 @@ mod tests {
             description: "Test mapping".to_string(),
             rule_type: TransformationType::ValueMapping,
             conditions: None,
-            logic: TransformationLogic::ValueMap(value_map),
+            logic: TransformationLogic::ValueMap { mappings: value_map },
             priority: 1,
         };
 
@@ -464,7 +518,7 @@ mod tests {
             description: "Test template".to_string(),
             rule_type: TransformationType::Template,
             conditions: None,
-            logic: TransformationLogic::Template("et-0/0/{port}".to_string()),
+            logic: TransformationLogic::Template { template: "et-0/0/{port}".to_string() },
             priority: 1,
         };
 

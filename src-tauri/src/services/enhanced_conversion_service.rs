@@ -104,6 +104,15 @@ impl EnhancedConversionService {
         })
     }
 
+    /// Normalize whitespace characters (\r\n, \n, \t, etc.) to single spaces for header matching
+    fn normalize_whitespace(text: &str) -> String {
+        use regex::Regex;
+        lazy_static::lazy_static! {
+            static ref WHITESPACE_REGEX: Regex = Regex::new(r"\s+").unwrap();
+        }
+        WHITESPACE_REGEX.replace_all(text.trim(), " ").to_string()
+    }
+
     fn find_best_field_match(&self, excel_header: &str, enhanced_map: &EnhancedConversionMap) -> Option<(String, f64)> {
         let mut best_match = None;
         let mut best_confidence = 0.0;
@@ -112,28 +121,36 @@ impl EnhancedConversionService {
             for xlsx_mapping in &field_def.xlsx_mappings {
                 let confidence = match &xlsx_mapping.mapping_type {
                     MappingType::Exact => {
+                        // Apply whitespace normalization to both pattern and header
+                        let normalized_pattern = Self::normalize_whitespace(&xlsx_mapping.pattern);
+                        let normalized_header = Self::normalize_whitespace(excel_header);
+                        
                         let pattern = if xlsx_mapping.case_sensitive {
-                            &xlsx_mapping.pattern
+                            &normalized_pattern
                         } else {
-                            &xlsx_mapping.pattern.to_lowercase()
+                            &normalized_pattern.to_lowercase()
                         };
                         let header = if xlsx_mapping.case_sensitive {
-                            excel_header
+                            &normalized_header
                         } else {
-                            &excel_header.to_lowercase()
+                            &normalized_header.to_lowercase()
                         };
                         if pattern == header { 1.0 } else { 0.0 }
                     },
                     MappingType::Partial => {
+                        // Apply whitespace normalization to both pattern and header
+                        let normalized_pattern = Self::normalize_whitespace(&xlsx_mapping.pattern);
+                        let normalized_header = Self::normalize_whitespace(excel_header);
+                        
                         let pattern = if xlsx_mapping.case_sensitive {
-                            &xlsx_mapping.pattern
+                            &normalized_pattern
                         } else {
-                            &xlsx_mapping.pattern.to_lowercase()
+                            &normalized_pattern.to_lowercase()
                         };
                         let header = if xlsx_mapping.case_sensitive {
-                            excel_header
+                            &normalized_header
                         } else {
-                            &excel_header.to_lowercase()
+                            &normalized_header.to_lowercase()
                         };
                         if header.contains(pattern) { 0.8 } else { 0.0 }
                     },

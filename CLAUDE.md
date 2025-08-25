@@ -133,11 +133,85 @@ use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 
 **Session Management**: Stateful authentication with automatic token refresh
 
-**CRITICAL API Data Merging**: Apstra graph queries return same connection across multiple result chunks. Must merge chunks to preserve speed data. See **@docs/core-features.md** section "CRITICAL: Apstra API Data Merging".
+## 🚨 CRITICAL API Data Merging Pattern 🚨
 
-- ❌ **NEVER** overwrite API result chunks without merging
-- ✅ **ALWAYS** merge to preserve speed/LAG mode/CT data
-- ✅ Located in `ProvisioningTable.tsx` `compareAndUpdateConnectivityData()`
+**FUNDAMENTAL APSTRA ARCHITECTURE**: Graph queries with optional sections return the SAME logical connection across MULTIPLE result chunks.
+
+**Real-World Impact**: 
+- Single connection (switch1 → server1) may return 4+ separate API result items
+- Each chunk contains different data: basic info, speed, LAG config, connectivity templates
+- **Missing ANY chunk = missing critical fields in provisioning table**
+
+**Required Implementation**:
+```typescript
+// NEVER: item.ae1?.if_name overwrites existing data
+// ALWAYS: Merge all chunks for same connection key
+if (existingData) {
+  const mergedRawData = {
+    ...existingData.rawData, ...item,
+    ae1: existingData.rawData?.ae1 || item.ae1,        // Preserve LAG data
+    link1: existingData.rawData?.link1 || item.link1   // Preserve speed data
+  };
+}
+```
+
+**Never Rules**:
+- ❌ **NEVER** overwrite API result chunks without merging (causes data loss)
+- ❌ **NEVER** assume `ae1.if_name` appears in first API result chunk
+- ❌ **NEVER** assume `link1.speed` appears with basic connection info
+
+**Always Rules**:
+- ✅ **ALWAYS** merge all API result chunks for same connection key
+- ✅ **ALWAYS** preserve existing data when adding new chunk data  
+- ✅ **ALWAYS** test that LAG/Bond Name and Link Speed appear correctly
+
+**Implementation Location**: `src/components/ProvisioningTable/ProvisioningTable.tsx` `compareAndUpdateConnectivityData()`
+
+**Complete Documentation**: See **@docs/core-features.md** section "CRITICAL: Apstra API Data Merging"
+
+## 🚨 CRITICAL LAG/Bond Name Processing 🚨
+
+**SOPHISTICATED GROUP VALIDATION**: LAG/Bond Name processing operates on groups of connections, not individual fields.
+
+**Auto-Generation Rules**:
+- **Trigger**: Excel cell empty AND LAG Mode is "lacp_active"
+- **Pattern**: Sequential LAG names starting from ae900 (ae900, ae901, ae902...)
+- **Grouping**: Server-switch pairs get same LAG name
+- **Example**: server1-switch1 connections → ae900, server2-switch1 connections → ae901
+
+**Group Validation Logic**:
+```typescript
+// Excel: rows 7-8 both have ae900 (same LAG group)
+// API: both return ae1.if_name = "ae0" (same API LAG)
+// Result: LAG GROUP MATCH (not individual field comparison)
+```
+
+**Critical Implementation Pattern**:
+```typescript
+// WRONG: Individual field comparison
+lagMatch = (excelLagName === apiLagName)
+
+// CORRECT: Group consistency validation  
+lagMatch = lagGroupValidation.get(connectionKey) || false
+```
+
+**Never Rules**:
+- ❌ **NEVER** use simple field comparison for LAG names
+- ❌ **NEVER** overwrite user-provided LAG names with auto-generated ones
+- ❌ **NEVER** validate LAG groups individually instead of collectively
+- ❌ **NEVER** modify LAG processing without testing fixture rows 7-8 scenario
+
+**Always Rules**:
+- ✅ **ALWAYS** auto-generate sequential LAG names for empty lacp_active connections
+- ✅ **ALWAYS** validate LAG groups collectively (group consistency)
+- ✅ **ALWAYS** preserve user-provided LAG names in Excel input
+- ✅ **ALWAYS** integrate with multi-chunk API merging for ae1.if_name data
+
+**Implementation Location**: `src/components/ProvisioningTable/ProvisioningTable.tsx`
+- `processLagBondNames()` - Auto-generation logic
+- `validateLagGroupConsistency()` - Group validation logic
+
+**Complete Documentation**: See **@docs/core-features.md** section "CRITICAL: LAG/Bond Name Processing"
 
 ## Critical File Locations
 
@@ -159,3 +233,4 @@ For detailed implementation patterns, troubleshooting, and development practices
 
 - implement test in early phase to detect blank page and the DOM error that can cause blank page
 - the provisiong should render the xlsx input data when the sheet is selected. If Apstra Connection is made, the blueprint selection should be made. Otherwise, just render the xlsx input data.
+- for the enhanced coversion logic, document and follow the decisions in @docs/enhanced-conversion-map.md

@@ -34,7 +34,7 @@ pub struct XlsxMapping {
     pub transform: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MappingType {
     Exact,
@@ -108,12 +108,16 @@ pub enum TransformationType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "type")]
 pub enum TransformationLogic {
-    ValueMap(HashMap<String, String>),
-    Template(String),
-    Function(String),
-    Pipeline(Vec<TransformationStep>),
+    #[serde(rename = "value_map")]
+    ValueMap { mappings: HashMap<String, String> },
+    #[serde(rename = "template")]
+    Template { template: String },
+    #[serde(rename = "function")]
+    Function { name: String },
+    #[serde(rename = "pipeline")]
+    Pipeline { steps: Vec<TransformationStep> },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

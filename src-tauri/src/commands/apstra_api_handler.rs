@@ -253,3 +253,19 @@ pub async fn apstra_dump_blueprint(
         }
     }
 }
+
+/// Load Apstra query templates from individual files
+#[tauri::command]
+pub async fn load_apstra_queries() -> Result<ApiResult<HashMap<String, String>>, String> {
+    log::info!("Loading Apstra query templates");
+    
+    let mut queries = HashMap::new();
+    
+    // Load individual query files
+    queries.insert("connectivity_query".to_string(), include_str!("../../../data/queries/connectivity_query.gql").to_string());
+    queries.insert("system_search_query".to_string(), include_str!("../../../data/queries/system_search_query.gql").to_string());
+    queries.insert("blueprint_leafs_query".to_string(), include_str!("../../../data/queries/blueprint_leafs_query.gql").to_string());
+    
+    log::info!("Successfully loaded {} query templates", queries.len());
+    Ok(ApiResult::success(queries))
+}

@@ -35,9 +35,46 @@ export class ApstraApiService {
   private sessionId: string;
   private isAuthenticated: boolean = false;
   private baseUrl: string = '';
+  private queryTemplates: { [key: string]: string } = {};
 
   private constructor() {
     this.sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  /**
+   * Load query templates from data file
+   */
+  private async loadQueryTemplates(): Promise<void> {
+    if (Object.keys(this.queryTemplates).length === 0) {
+      try {
+        const result = await invoke<ApiResult<{ [key: string]: string }>>('load_apstra_queries');
+        if (result.success && result.data) {
+          this.queryTemplates = result.data;
+        }
+      } catch (error) {
+        console.error('Failed to load query templates:', error);
+        // Use fallback hardcoded queries if loading fails
+      }
+    }
+  }
+
+  /**
+   * Get a query template with parameter substitution
+   */
+  private async getQuery(queryName: string, params: { [key: string]: string } = {}): Promise<string> {
+    await this.loadQueryTemplates();
+    
+    let query = this.queryTemplates[queryName];
+    if (!query) {
+      throw new Error(`Query template '${queryName}' not found`);
+    }
+    
+    // Replace placeholders with actual values
+    for (const [key, value] of Object.entries(params)) {
+      query = query.replace(new RegExp(`\\{${key}\\}`, 'g'), value);
+    }
+    
+    return query;
   }
 
   public static getInstance(): ApstraApiService {
@@ -207,33 +244,10 @@ export class ApstraApiService {
       switchFilter = `, label=is_in([${labelsList}])`;
     }
 
-    // Complex graph query to get switch-to-server connectivity information
-    // Optimized to filter switches at query level using is_in() function
-    const connectivityQuery = `
-      match(
-        node('system', system_type='switch'${switchFilter}, name='switch')
-         .out('hosted_interfaces').node('interface', if_type='ethernet', name='intf1')
-          .out('link').node('link', name='link1')
-          .in_('link').node(name='intf2')
-          .in_('hosted_interfaces').node('system', system_type='server', name='server'),
-        optional(
-          node(name='switch').out('part_of_redundancy_group').node('redundancy_group', name='rg1')
-            .out('hosted_interfaces').node('interface', name='evpn1')
-            .out('link').node('link', name='evpn-link')
-            .in_('link').node('interface', name='evpn2')
-            .in_('hosted_interfaces').node(name='server'),
-          ),
-        optional(
-          node(name='rg1').out('hosted_interfaces').node(name='evpn1')
-            .out('composed_of').node(name='ae1')
-            .out('composed_of').node(name='intf1')
-          ),
-        optional(
-          node(name='rg1').out('hosted_interfaces').node(name='evpn1')
-            .out().node(name='intf1')
-         )
-      )
-    `;
+    // Load connectivity query from template
+    const connectivityQuery = await this.getQuery('connectivity_query', {
+      switch_filter: switchFilter
+    });
 
     return await this.executeQuery(blueprintId, connectivityQuery);
   }
@@ -321,8 +335,12 @@ export class ApstraApiService {
   /**
    * Helper method to create a system search query
    */
-  public static createSystemQuery(serverName: string): string {
-    const query = `match(node('system', label='${serverName}', name='system'))`;
+  public static async createSystemQuery(serverName: string): Promise<string> {
+    // Use instance method to access query templates
+    const instance = ApstraApiService.getInstance();
+    const query = await instance.getQuery('system_search_query', {
+      server_name: serverName
+    });
     return ApstraApiService.normalizeQuery(query);
   }
 

@@ -175,7 +175,8 @@ fn convert_enhanced_to_network_config_row(field_data: &HashMap<String, String>) 
         .cloned();
     let link_group_lag_mode = field_data.get("link_group_lag_mode")
         .filter(|s| !s.trim().is_empty())
-        .cloned();
+        .cloned()
+        .or(Some("none".to_string())); // Default to "none" when not present or empty
     let link_group_ct_names = field_data.get("link_group_ct_names")
         .filter(|s| !s.trim().is_empty())
         .cloned();
@@ -193,7 +194,15 @@ fn convert_enhanced_to_network_config_row(field_data: &HashMap<String, String>) 
         .cloned();
     let is_external = field_data.get("is_external")
         .filter(|s| !s.trim().is_empty())
-        .and_then(|val| val.to_lowercase().parse::<bool>().ok());
+        .and_then(|val| {
+            // Handle boolean conversion from Enhanced Conversion Map transformations
+            match val.to_lowercase().as_str() {
+                "true" | "yes" | "y" | "1" => Some(true),
+                "false" | "no" | "n" | "0" => Some(false),
+                _ => val.parse::<bool>().ok()
+            }
+        })
+        .or(Some(false)); // Default to false (No) when not present
     let comment = field_data.get("comment")
         .filter(|s| !s.trim().is_empty())
         .cloned();

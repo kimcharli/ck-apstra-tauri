@@ -5,7 +5,7 @@
   "updated_at": "2024-01-15T00:00:00Z",
   "field_definitions": {
     "server_label": {
-      "display_name": "Server Name",
+      "display_name": "Server\nName",
       "description": "Server or device name",
       "data_type": "string",
       "is_required": true,
@@ -42,14 +42,14 @@
         "max_length": 255
       },
       "ui_config": {
-        "column_width": 180,
+        "column_width": 120,
         "sortable": true,
         "filterable": true,
         "hidden": false
       }
     },
     "switch_label": {
-      "display_name": "Switch Name",
+      "display_name": "Switch\nName",
       "description": "Network switch name",
       "data_type": "string",
       "is_required": true,
@@ -86,14 +86,14 @@
         "max_length": 255
       },
       "ui_config": {
-        "column_width": 180,
+        "column_width": 120,
         "sortable": true,
         "filterable": true,
         "hidden": false
       }
     },
     "switch_ifname": {
-      "display_name": "Switch Interface",
+      "display_name": "Switch\nInterface",
       "description": "Switch interface name or port number",
       "data_type": "string",
       "is_required": true,
@@ -130,7 +130,7 @@
         "max_length": 50
       },
       "ui_config": {
-        "column_width": 150,
+        "column_width": 100,
         "sortable": true,
         "filterable": true,
         "hidden": false
@@ -138,7 +138,7 @@
       "transformations": ["generate_interface_name"]
     },
     "server_ifname": {
-      "display_name": "Server Interface",
+      "display_name": "Server\nInterface",
       "description": "Server interface name",
       "data_type": "string",
       "is_required": true,
@@ -175,14 +175,14 @@
         "max_length": 50
       },
       "ui_config": {
-        "column_width": 150,
+        "column_width": 100,
         "sortable": true,
         "filterable": true,
         "hidden": false
       }
     },
     "link_speed": {
-      "display_name": "Link Speed",
+      "display_name": "Link\nSpeed",
       "description": "Network link speed",
       "data_type": "string",
       "is_required": false,
@@ -218,7 +218,7 @@
         "pattern": "^(\\d+[GM]?|\\d+\\s*(Gbps|Mbps|GB|MB))$"
       },
       "ui_config": {
-        "column_width": 120,
+        "column_width": 80,
         "sortable": true,
         "filterable": true,
         "hidden": false
@@ -226,7 +226,7 @@
       "transformations": ["normalize_speed"]
     },
     "link_group_lag_mode": {
-      "display_name": "LAG Mode",
+      "display_name": "LAG\nMode",
       "description": "Link aggregation mode",
       "data_type": "string",
       "is_required": false,
@@ -239,7 +239,13 @@
           "case_sensitive": false
         },
         {
-          "pattern": "(?i)lag.*mode|aggregation.*mode",
+          "pattern": "LACP\nNeeded",
+          "mapping_type": "exact",
+          "priority": 100,
+          "case_sensitive": false
+        },
+        {
+          "pattern": "(?i)lag.*mode|aggregation.*mode|lacp.*needed",
           "mapping_type": "regex",
           "priority": 80,
           "case_sensitive": false
@@ -247,23 +253,24 @@
       ],
       "api_mappings": [
         {
-          "primary_path": "$.lag.mode",
-          "fallback_paths": ["$.aggregation.mode"],
-          "transformation": null
+          "primary_path": "$.evpn1.lag_mode",
+          "fallback_paths": ["$.lag.mode", "$.aggregation.mode"],
+          "transformation": "lag_mode_conversion"
         }
       ],
       "validation_rules": {
-        "allowed_values": ["lacp", "static", "none"]
+        "allowed_values": ["lacp_active", "static", "none"]
       },
+      "transformations": ["lag_mode_conversion"],
       "ui_config": {
-        "column_width": 120,
+        "column_width": 80,
         "sortable": true,
         "filterable": true,
         "hidden": false
       }
     },
     "link_group_ct_names": {
-      "display_name": "Connectivity Templates",
+      "display_name": "Connectivity\nTemplate",
       "description": "Connectivity template names",
       "data_type": "string",
       "is_required": false,
@@ -297,14 +304,14 @@
       ],
       "validation_rules": {},
       "ui_config": {
-        "column_width": 200,
+        "column_width": 120,
         "sortable": true,
         "filterable": true,
         "hidden": false
       }
     },
     "link_group_ifname": {
-      "display_name": "AE Interface",
+      "display_name": "LAG/Bond\nName",
       "description": "Aggregated ethernet interface name",
       "data_type": "string",
       "is_required": false,
@@ -331,8 +338,8 @@
       ],
       "api_mappings": [
         {
-          "primary_path": "$.ae_interface.name",
-          "fallback_paths": ["$.lag_interface.name"],
+          "primary_path": "$.ae1.if_name",
+          "fallback_paths": ["$.ae_interface.name", "$.lag_interface.name"],
           "transformation": null
         }
       ],
@@ -340,7 +347,7 @@
         "pattern": "^ae\\d+$"
       },
       "ui_config": {
-        "column_width": 120,
+        "column_width": 100,
         "sortable": true,
         "filterable": true,
         "hidden": false
@@ -368,23 +375,24 @@
       ],
       "api_mappings": [
         {
-          "primary_path": "$.is_external",
-          "fallback_paths": ["$.external"],
-          "transformation": null
+          "primary_path": "$.switch.external",
+          "fallback_paths": ["$.external", "$.is_external"],
+          "transformation": "boolean_conversion"
         }
       ],
       "validation_rules": {
         "allowed_values": ["true", "false", "yes", "no", "1", "0"]
       },
       "ui_config": {
-        "column_width": 100,
+        "column_width": 70,
         "sortable": true,
         "filterable": true,
         "hidden": false
-      }
+      },
+      "transformations": ["boolean_conversion"]
     },
     "server_tags": {
-      "display_name": "Server Tags",
+      "display_name": "Server\nTags",
       "description": "Tags for the server",
       "data_type": "string",
       "is_required": false,
@@ -454,7 +462,7 @@
       }
     },
     "link_tags": {
-      "display_name": "Link Tags",
+      "display_name": "Link\nTags",
       "description": "Tags for the link",
       "data_type": "string",
       "is_required": false,
@@ -489,7 +497,7 @@
       }
     },
     "comment": {
-      "display_name": "Comment",
+      "display_name": "Comments",
       "description": "Additional comments or notes",
       "data_type": "string",
       "is_required": false,
@@ -542,7 +550,8 @@
         "has_speed_data": true
       },
       "logic": {
-        "Function": "generate_interface_name"
+        "type": "function",
+        "name": "generate_interface_name"
       },
       "priority": 100
     },
@@ -552,7 +561,8 @@
       "rule_type": "dynamic",
       "conditions": null,
       "logic": {
-        "Function": "normalize_speed"
+        "type": "function",
+        "name": "normalize_speed"
       },
       "priority": 80
     },
@@ -562,16 +572,44 @@
       "rule_type": "dynamic",
       "conditions": null,
       "logic": {
-        "yes": "true",
-        "no": "false",
-        "1": "true",
-        "0": "false",
-        "Y": "true",
-        "N": "false",
-        "TRUE": "true",
-        "FALSE": "false"
+        "type": "value_map",
+        "mappings": {
+          "yes": "true",
+          "no": "false",
+          "1": "true",
+          "0": "false",
+          "Y": "true",
+          "N": "false",
+          "TRUE": "true",
+          "FALSE": "false"
+        }
       },
       "priority": 60
+    },
+    "lag_mode_conversion": {
+      "name": "LAG Mode Conversion",
+      "description": "Convert LACP Yes/No values to lacp_active/static modes",
+      "rule_type": "dynamic",
+      "conditions": null,
+      "logic": {
+        "type": "value_map",
+        "mappings": {
+          "yes": "lacp_active",
+          "no": "none",
+          "y": "lacp_active",
+          "n": "none",
+          "YES": "lacp_active",
+          "NO": "none",
+          "Y": "lacp_active",
+          "N": "none",
+          "true": "lacp_active",
+          "false": "none",
+          "1": "lacp_active",
+          "0": "none",
+          "lacp": "lacp_active"
+        }
+      },
+      "priority": 70
     },
     "trim_and_clean": {
       "name": "Trim and Clean",
@@ -579,7 +617,8 @@
       "rule_type": "dynamic",
       "conditions": null,
       "logic": {
-        "Function": "trim_whitespace"
+        "type": "function",
+        "name": "trim_whitespace"
       },
       "priority": 40
     }
