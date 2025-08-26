@@ -1,6 +1,6 @@
 match(
   node('system', system_type='switch'{switch_filter}, name='switch')
-   .out('hosted_interfaces').node('interface', if_type='ethernet', name='intf1')
+    .out('hosted_interfaces').node('interface', if_type='ethernet', name='intf1')
     .out('link').node('link', name='link1')
     .in_('link').node(name='intf2')
     .in_('hosted_interfaces').node('system', system_type='server', name='server'),
@@ -19,5 +19,11 @@ match(
   optional(
     node(name='rg1').out('hosted_interfaces').node(name='evpn1')
       .out().node(name='intf1')
+   ),
+  optional(
+    node(name='rg1').out('hosted_interfaces').node(name='evpn1')
+      .out().node('ep_group')
+      .in_().node('ep_application_instance')
+      .out().node('ep_endpoint_policy', policy_type_name='batch', name='CT')
    )
 )

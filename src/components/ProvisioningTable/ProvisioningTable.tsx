@@ -508,6 +508,11 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             mergedRawData.ct_names = item.ct_names;
           }
           
+          // If this chunk has CT node data and the existing doesn't, use it
+          if (item.CT && !existingData.rawData?.CT) {
+            mergedRawData.CT = item.CT;
+          }
+          
           console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
             existing: existingData.rawData,
             new: item,
@@ -608,7 +613,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         // Extract speed and other data from the merged API result
         const apiSpeed = apiData.rawData?.link1?.speed || '';
         const apiLagMode = apiData.rawData?.evpn1?.lag_mode || apiData.rawData?.lag_mode || '';
-        const apiCtNames = apiData.rawData?.ct_names || '';
+        const apiCtNames = apiData.rawData?.ct_names || apiData.rawData?.CT?.label || '';
         const apiLagIfname = apiData.rawData?.ae1?.if_name || apiData.rawData?.ae_interface?.name || '';
         
         const newRow: NetworkConfigRow = {
@@ -759,7 +764,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     const apiServerInterface = apiData.server_intf?.if_name || apiData.intf2?.if_name || apiData.serverInterface || '';
     const apiSpeedRaw = apiData.link1?.speed || apiData.rawData?.link1?.speed || '';
     const apiLagMode = apiData.evpn1?.lag_mode || apiData.rawData?.evpn1?.lag_mode || apiData.lag_mode || apiData.rawData?.lag_mode || '';
-    const apiCtNames = apiData.ct_names || apiData.rawData?.ct_names || '';
+    const apiCtNames = apiData.ct_names || apiData.rawData?.ct_names || apiData.CT?.label || apiData.rawData?.CT?.label || '';
     const apiLagIfname = apiData.ae1?.if_name || apiData.rawData?.ae1?.if_name || apiData.ae_interface?.name || apiData.rawData?.ae_interface?.name || '';
     const apiExternal = apiData.is_external || apiData.rawData?.is_external || false;
 
