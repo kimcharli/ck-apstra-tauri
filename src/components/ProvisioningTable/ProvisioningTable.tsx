@@ -213,7 +213,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       nextLagNumber++;
       
       console.log(`🔗 Auto-generating LAG name "${lagName}" for ${connections.length} connections in group: ${lagGroupKey}`);
-      console.log(`   Interfaces: ${connections.map(c => `${c.switch_ifname}↔${c.server_ifname}`).join(', ')}`);
       
       // Apply the SAME LAG name to ALL connections in this group
       connections.forEach(conn => {
@@ -487,48 +486,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         // Use switch_label + switch_ifname as key - keep original format for Excel matching
         const connectionKey = `${switchName}-${switchInterface}`;
         
-        // DEBUG: Log connection key generation (reduced verbosity after query fix)
-        if (item.ct_names || item.CT?.label) {
-          console.log(`🔑 Connection key "${connectionKey}" with CT data:`, {
-            ct_data: item.ct_names || item.CT?.label,
-            used_fallback: !item.switch_intf?.if_name && item.intf1?.if_name
-          });
-        }
-        
-        // Enhanced debugging for AE interface and CT data association
-        if (item.ae1?.if_name || item.ct_names || item.CT) {
-          console.log(`📊 Processing API chunk for ${connectionKey}:`, {
-            switchInterface: switchInterface,
-            ae1_if_name: item.ae1?.if_name,
-            ct_names: item.ct_names, 
-            CT_label: item.CT?.label,
-            server: serverName,
-            switch: switchName
-          });
-        }
-        
-        // Specific debugging for the problem case - USE ERROR LEVEL TO MAKE IT VISIBLE
-        if (switchName === 'CRL01P24L09' && switchInterface === 'et-0/0/45') {
-          console.error(`🎯🚨 PROBLEM CASE - CRL01P24L09 et-0/0/45:`, {
-            connectionKey: connectionKey,
-            ct_names: item.ct_names,
-            CT_label: item.CT?.label,
-            expected: 'VN-2065-tagged',
-            ae1_if_name: item.ae1?.if_name,
-            has_ct_data: !!(item.ct_names || item.CT)
-          });
-        }
-        
-        // Also debug any VN-2064-tagged or VN-2065-tagged CT assignments - USE ERROR LEVEL
-        if (item.ct_names && (item.ct_names.includes('VN-2064-tagged') || item.ct_names.includes('VN-2065-tagged'))) {
-          console.error(`🏷️🚨 VN TAG ASSIGNMENT:`, {
-            ct_names: item.ct_names,
-            switch: switchName,
-            interface: switchInterface,
-            connectionKey: connectionKey,
-            server: serverName
-          });
-        }
+        // Process this valid connection key
         
         // Check if this connection already exists in our map
         const existingData = apiConnectionsMap.get(connectionKey);
@@ -539,22 +497,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
           const existingCTs = existingData.rawData?.ct_names || existingData.rawData?.CT?.label || '';
           const newCTs = item.ct_names || item.CT?.label || '';
           
-          // Enhanced debug logging for specific connection
-          if (connectionKey.includes('CRL01P24L09-et-0/0/45')) {
-            console.log(`🔍 CT MERGING DEBUG - ${connectionKey}:`, {
-              switchName: switchName,
-              switchInterface: switchInterface,
-              serverName: serverName,
-              existingCTs: existingCTs,
-              newCTs: newCTs,
-              item_ct_names: item.ct_names,
-              item_CT_label: item.CT?.label,
-              existing_rawData_ct_names: existingData.rawData?.ct_names,
-              existing_rawData_CT_label: existingData.rawData?.CT?.label,
-              full_item: item,
-              full_existing: existingData.rawData
-            });
-          }
           
           let mergedCtNames = '';
           if (newCTs && existingCTs) {
@@ -633,35 +575,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             mergedRawData.intf1 = item.intf1;
           }
           
-          console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
-            switchInterface: switchInterface,
-            existing_ct_names: existingData.rawData?.ct_names,
-            existing_CT_label: existingData.rawData?.CT?.label,
-            new_ct_names: item.ct_names,
-            new_CT_label: item.CT?.label,
-            merged_ct_names: mergedRawData.ct_names,
-            merged_CT_label: mergedRawData.CT?.label,
-            existing_ae1: existingData.rawData?.ae1?.if_name,
-            new_ae1: item.ae1?.if_name
-          });
-          
-          // Specific debugging for the problem case during merging - USE ERROR LEVEL
-          if (switchName === 'CRL01P24L09' && switchInterface === 'et-0/0/45') {
-            console.error(`🚨💥 MERGING PROBLEM CASE - CRL01P24L09 et-0/0/45:`, {
-              before_merge_ct: existingData.rawData?.ct_names,
-              before_merge_CT: existingData.rawData?.CT?.label,
-              new_chunk_ct: item.ct_names,
-              new_chunk_CT: item.CT?.label,
-              will_merge_ct_names: !!(item.ct_names && !existingData.rawData?.ct_names),
-              will_merge_CT: !!(item.CT && !existingData.rawData?.CT),
-              after_merge_ct: mergedRawData.ct_names,
-              after_merge_CT: mergedRawData.CT?.label,
-              expected: 'VN-2065-tagged',
-              actual_will_be: mergedRawData.ct_names || mergedRawData.CT?.label,
-              is_correct: (mergedRawData.ct_names || mergedRawData.CT?.label) === 'VN-2065-tagged'
-            });
-          }
-          
           apiConnectionsMap.set(connectionKey, {
             switchName,
             serverName,
@@ -672,32 +585,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         } else {
           // First time seeing this connection - ensure CT data is properly stored
           const ctData = item.ct_names || item.CT?.label || '';
-          
-          // Enhanced debug logging for specific connection
-          if (connectionKey.includes('CRL01P24L09-et-0/0/45')) {
-            console.log(`🔍 FIRST TIME DEBUG - ${connectionKey}:`, {
-              switchName: switchName,
-              switchInterface: switchInterface,
-              serverName: serverName,
-              item_ct_names: item.ct_names,
-              item_CT_label: item.CT?.label,
-              extracted_ct_data: ctData,
-              full_item: item
-            });
-          }
-          
-          // Log initial AE/CT data with proper CT extraction
-          if (item.ae1?.if_name || ctData) {
-            console.log(`🆕 First time processing connection ${connectionKey}:`, {
-              switch: switchName,
-              interface: switchInterface,
-              switchInterface: switchInterface,
-              ae1_if_name: item.ae1?.if_name,
-              ct_names: item.ct_names,
-              CT_label: item.CT?.label,
-              extracted_ct_data: ctData
-            });
-          }
           
           // Store the raw data with properly extracted CT information
           const rawData = {
