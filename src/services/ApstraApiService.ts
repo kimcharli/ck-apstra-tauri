@@ -244,13 +244,14 @@ export class ApstraApiService {
       switchFilter = `, label=is_in([${labelsList}])`;
     }
 
-    // Load connectivity query from template
-    const connectivityQuery = await this.getQuery('connectivity_query', {
+    // Load connectivity templates query from template (includes both connectivity and CT data)
+    const connectivityQuery = await this.getQuery('connectivity_templates_query', {
       switch_filter: switchFilter
     });
 
     return await this.executeQuery(blueprintId, connectivityQuery);
   }
+
 
   /**
    * Check if the current session is authenticated

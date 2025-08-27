@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useReducer } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { open, save } from '@tauri-apps/api/dialog';
 import { ApstraConfig, ApstraConfigUIState } from '../../types';
@@ -15,19 +15,48 @@ interface ApstraConfigManagerProps {
   onNavigate?: (page: 'home' | 'apstra-connection' | 'conversion-map' | 'provisioning' | 'tools') => void;
 }
 
+const initialState: ApstraConfigUIState = {
+  isLoading: false,
+  currentConfig: null,
+  isTestingConnection: false,
+  connectionStatus: 'unknown',
+  validationErrors: [],
+};
+
+type Action = 
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_CURRENT_CONFIG'; payload: ApstraConfig | null }
+  | { type: 'SET_IS_TESTING_CONNECTION'; payload: boolean }
+  | { type: 'SET_CONNECTION_STATUS'; payload: 'unknown' | 'success' | 'failed' }
+  | { type: 'SET_VALIDATION_ERRORS'; payload: string[] }
+  | { type: 'RESET' };
+
+const reducer = (state: ApstraConfigUIState, action: Action): ApstraConfigUIState => {
+  switch (action.type) {
+    case 'SET_LOADING':
+      return { ...state, isLoading: action.payload };
+    case 'SET_CURRENT_CONFIG':
+      return { ...state, currentConfig: action.payload };
+    case 'SET_IS_TESTING_CONNECTION':
+      return { ...state, isTestingConnection: action.payload };
+    case 'SET_CONNECTION_STATUS':
+      return { ...state, connectionStatus: action.payload };
+    case 'SET_VALIDATION_ERRORS':
+      return { ...state, validationErrors: action.payload };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+};
+
 const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   isVisible,
   onConfigChange,
   currentConfig,
   onNavigate
 }) => {
-  const [state, setState] = useState<ApstraConfigUIState>({
-    isLoading: false,
-    currentConfig: null,
-    isTestingConnection: false,
-    connectionStatus: 'unknown',
-    validationErrors: []
-  });
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   const [isConnecting, setIsConnecting] = useState(false);
   
@@ -57,29 +86,23 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   useEffect(() => {
     if (currentConfig) {
       setFormData({ ...currentConfig });
-      setState(prev => ({ ...prev, currentConfig }));
+      dispatch({ type: 'SET_CURRENT_CONFIG', payload: currentConfig });
     }
   }, [currentConfig]);
 
   const loadDefaultConfig = async () => {
-    setState(prev => ({ ...prev, isLoading: true }));
+    dispatch({ type: 'SET_LOADING', payload: true });
     try {
       const defaultConfig = await invoke<ApstraConfig>('load_default_apstra_config');
       setFormData(defaultConfig);
-      setState(prev => ({ 
-        ...prev, 
-        currentConfig: defaultConfig,
-        isLoading: false,
-        connectionStatus: 'unknown',
-        validationErrors: []
-      }));
+      dispatch({ type: 'SET_CURRENT_CONFIG', payload: defaultConfig });
+      dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'unknown' });
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [] });
     } catch (error) {
       console.error('Failed to load default Apstra config:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        validationErrors: [`Failed to load default config: ${error}`]
-      }));
+      dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [`Failed to load default config: ${error}`] });
     }
   };
 
@@ -91,12 +114,13 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     
     // Clear validation errors when user starts editing
     if (state.validationErrors.length > 0) {
-      setState(prev => ({ ...prev, validationErrors: [], connectionStatus: 'unknown' }));
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [] });
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'unknown' });
     }
 
     // If connection-related fields change, invalidate authentication
     if (['host', 'port', 'username', 'password', 'use_ssl'].includes(field as string) && isAuthenticated) {
-      setState(prev => ({ ...prev, connectionStatus: 'unknown' }));
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'unknown' });
       logout(); // Use centralized logout
       console.log(`Apstra configuration field '${field}' changed. Authentication invalidated.`);
     }
@@ -121,7 +145,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
       errors.push('Blueprint name is required');
     }
 
-    setState(prev => ({ ...prev, validationErrors: errors }));
+    dispatch({ type: 'SET_VALIDATION_ERRORS', payload: errors });
     return errors.length === 0;
   };
 
@@ -129,6 +153,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
     if (!validateConfig()) return;
 
     setIsConnecting(true);
+    dispatch({ type: 'SET_IS_TESTING_CONNECTION', payload: true });
 
     try {
       // First save the configuration
@@ -143,23 +168,18 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
       // Use centralized authentication
       await authenticate(baseUrl, formData.username, formData.password);
       
-      setState(prev => ({ 
-        ...prev, 
-        connectionStatus: 'success',
-        validationErrors: []
-      }));
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'success' });
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [] });
 
       console.log('Successfully authenticated with Apstra.');
       
     } catch (error: any) {
       console.error('Authentication failed:', error);
-      setState(prev => ({ 
-        ...prev, 
-        connectionStatus: 'failed',
-        validationErrors: [`Authentication failed: ${error.message || error}`]
-      }));
+      dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'failed' });
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [`Authentication failed: ${error.message || error}`] });
     } finally {
       setIsConnecting(false);
+      dispatch({ type: 'SET_IS_TESTING_CONNECTION', payload: false });
     }
   };
 
@@ -167,7 +187,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
   const saveConfig = () => {
     if (!validateConfig()) return;
     
-    setState(prev => ({ ...prev, currentConfig: { ...formData } }));
+    dispatch({ type: 'SET_CURRENT_CONFIG', payload: { ...formData } });
     
     if (onConfigChange) {
       onConfigChange({ ...formData });
@@ -204,10 +224,7 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
       }
     } catch (error) {
       console.error('Failed to save config to file:', error);
-      setState(prev => ({ 
-        ...prev, 
-        validationErrors: [`Failed to save to file: ${error}`]
-      }));
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [`Failed to save to file: ${error}`] });
     }
   };
 
@@ -219,30 +236,24 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
       });
 
       if (selected && typeof selected === 'string') {
-        setState(prev => ({ ...prev, isLoading: true }));
+        dispatch({ type: 'SET_LOADING', payload: true });
         
         const loadedConfig = await invoke<ApstraConfig>('load_apstra_config_from_file', { 
           filePath: selected 
         });
         
         setFormData(loadedConfig);
-        setState(prev => ({ 
-          ...prev, 
-          currentConfig: loadedConfig,
-          isLoading: false,
-          connectionStatus: 'unknown',
-          validationErrors: []
-        }));
+        dispatch({ type: 'SET_CURRENT_CONFIG', payload: loadedConfig });
+        dispatch({ type: 'SET_LOADING', payload: false });
+        dispatch({ type: 'SET_CONNECTION_STATUS', payload: 'unknown' });
+        dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [] });
         
         console.log(`Apstra config loaded from: ${selected}`);
       }
     } catch (error) {
       console.error('Failed to load config from file:', error);
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: false,
-        validationErrors: [`Failed to load from file: ${error}`]
-      }));
+      dispatch({ type: 'SET_LOADING', payload: false });
+      dispatch({ type: 'SET_VALIDATION_ERRORS', payload: [`Failed to load from file: ${error}`] });
     }
   };
 
@@ -406,10 +417,10 @@ const ApstraConfigManager: React.FC<ApstraConfigManagerProps> = ({
           <div className="action-group">
             <button
               onClick={connectToApstra}
-              disabled={isConnecting || state.isLoading}
+              disabled={isConnecting || state.isLoading || state.isTestingConnection}
               className={`connect-button ${isAuthenticated ? 'connected' : ''}`}
             >
-              {isConnecting ? 'Connecting...' : isAuthenticated ? '✅ Connected' : 'Connect to Apstra'}
+              {state.isTestingConnection ? <div className="spinner" /> : isConnecting ? 'Connecting...' : isAuthenticated ? '✅ Connected' : 'Connect to Apstra'}
             </button>
           </div>
 

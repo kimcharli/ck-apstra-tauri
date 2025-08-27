@@ -9,6 +9,7 @@ import ToolsPage from './components/ToolsPage/ToolsPage';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuthStatus } from './hooks/useAuthStatus';
 import { logger } from './services/LoggingService';
+import { NAVIGATION_ITEMS, getNavigationStyles, getDashboardCardStyles, getHoverStyles } from './config/navigation';
 import './App.css';
 
 // Main App Content Component (inside AuthProvider)
@@ -19,9 +20,9 @@ function AppContent() {
   const [conversionMap, setConversionMap] = useState<EnhancedConversionMap | null>(null);
   const [apstraConfig, setApstraConfig] = useState<ApstraConfig | null>(null);
   
-  // UI state management
+  // UI state management - Start with Apstra Connection page open
   const [showConversionManager, setShowConversionManager] = useState(false);
-  const [showApstraConfigManager, setShowApstraConfigManager] = useState(false);
+  const [showApstraConfigManager, setShowApstraConfigManager] = useState(true);
   const [showProvisioningPage, setShowProvisioningPage] = useState(false);
   const [showToolsPage, setShowToolsPage] = useState(false);
   
@@ -34,7 +35,14 @@ function AppContent() {
     logger.logInfo('SYSTEM', 'Application started', {
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
-      url: window.location.href
+      url: window.location.href,
+      startupPage: 'apstra-connection'
+    });
+    
+    // Log that we're starting with Apstra Connection page
+    logger.logWorkflowStart('Apstra Connection Configuration', { 
+      trigger: 'application_startup',
+      timestamp: new Date().toISOString() 
     });
     
     // Log app configuration on load
@@ -137,55 +145,40 @@ function AppContent() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Apstra Provisioning Tool</h1>
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <button 
-              onClick={() => {
-                logger.logButtonClick('1. Apstra Connection', 'Main Header');
-                setShowApstraConfigManager(true);
-                logger.logWorkflowStart('Apstra Connection Configuration', { trigger: 'header_button' });
-              }}
-              style={{ 
-                padding: '10px 20px', 
-                backgroundColor: isAuthenticated ? '#28a745' : '#dc3545',
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '6px', 
-                cursor: 'pointer',
-                animation: isAuthenticated ? 'none' : 'uncomfortable-pulse 2s infinite',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              1. Apstra Connection
-            </button>
-            <button 
-              onClick={() => {
-                logger.logButtonClick('2. Conversion Map', 'Main Header');
-                setShowConversionManager(true);
-                logger.logWorkflowStart('Conversion Map Management', { trigger: 'header_button' });
-              }}
-              style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-            >
-              2. Conversion Map
-            </button>
-            <button 
-              onClick={() => {
-                logger.logButtonClick('3. Provisioning', 'Main Header');
-                setShowProvisioningPage(true);
-                logger.logWorkflowStart('Network Provisioning', { trigger: 'header_button', hasConversionMap: !!conversionMap, hasApstraConfig: !!apstraConfig });
-              }}
-              style={{ padding: '10px 20px', backgroundColor: '#dc3545', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
-            >
-              3. Provisioning
-            </button>
-            <button 
-              onClick={() => {
-                logger.logButtonClick('4. Tools', 'Main Header');
-                setShowToolsPage(true);
-                logger.logWorkflowStart('Apstra Tools', { trigger: 'header_button' });
-              }}
-              style={{ padding: '10px 20px', backgroundColor: '#6f42c1', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}
-            >
-              4. Tools
-            </button>
+            {NAVIGATION_ITEMS.map((navItem) => {
+              const handleClick = () => {
+                logger.logButtonClick(navItem.label, 'Main Header');
+                
+                switch (navItem.id) {
+                  case 'apstra-connection':
+                    setShowApstraConfigManager(true);
+                    logger.logWorkflowStart('Apstra Connection Configuration', { trigger: 'header_button' });
+                    break;
+                  case 'provisioning':
+                    setShowProvisioningPage(true);
+                    logger.logWorkflowStart('Network Provisioning', { trigger: 'header_button', hasConversionMap: !!conversionMap, hasApstraConfig: !!apstraConfig });
+                    break;
+                  case 'tools':
+                    setShowToolsPage(true);
+                    logger.logWorkflowStart('Apstra Tools', { trigger: 'header_button' });
+                    break;
+                  case 'conversion-map':
+                    setShowConversionManager(true);
+                    logger.logWorkflowStart('Conversion Map Management', { trigger: 'header_button' });
+                    break;
+                }
+              };
+
+              return (
+                <button 
+                  key={navItem.id}
+                  onClick={handleClick}
+                  style={getNavigationStyles(navItem.id, false, isAuthenticated)}
+                >
+                  {navItem.label}
+                </button>
+              );
+            })}
             
             {/* Tauri Connection Status Button */}
             <button
@@ -223,139 +216,60 @@ function AppContent() {
             Streamline your network provisioning workflow with intelligent Excel processing and automated Apstra integration.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
-            <div 
-              onClick={() => {
-                logger.logButtonClick('Apstra Connection Card', 'Main Dashboard');
-                setShowApstraConfigManager(true);
-                logger.logWorkflowStart('Apstra Connection Configuration', { trigger: 'dashboard_card' });
-              }}
-              style={{ 
-                backgroundColor: 'white', 
-                padding: '20px', 
-                borderRadius: '8px', 
-                border: `2px solid ${isAuthenticated ? '#28a745' : '#dc3545'}`, 
-                minWidth: '200px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                animation: isAuthenticated ? 'none' : 'uncomfortable-pulse 2s infinite'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = isAuthenticated ? '#f8fff9' : '#fff8f8';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-              }}
-            >
-              <h3 style={{ color: isAuthenticated ? '#28a745' : '#dc3545', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                1. Apstra Connection
-                <span style={{ fontSize: '1.2rem' }}>→</span>
-              </h3>
-              <p style={{ color: '#666', fontSize: '0.9rem' }}>Set up connection to your Apstra controller and blueprint</p>
-            </div>
-            <div 
-              onClick={() => {
-                logger.logButtonClick('Conversion Map Card', 'Main Dashboard');
-                setShowConversionManager(true);
-                logger.logWorkflowStart('Conversion Map Management', { trigger: 'dashboard_card' });
-              }}
-              style={{ 
-                backgroundColor: 'white', 
-                padding: '20px', 
-                borderRadius: '8px', 
-                border: '2px solid #007bff', 
-                minWidth: '200px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f8fbff';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-              }}
-            >
-              <h3 style={{ color: '#007bff', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                2. Conversion Map
-                <span style={{ fontSize: '1.2rem' }}>→</span>
-              </h3>
-              <p style={{ color: '#666', fontSize: '0.9rem' }}>Customize Excel header mapping for accurate data processing</p>
-            </div>
-            <div 
-              onClick={() => {
-                logger.logButtonClick('Provisioning Card', 'Main Dashboard');
-                setShowProvisioningPage(true);
-                logger.logWorkflowStart('Network Provisioning', { trigger: 'dashboard_card', hasConversionMap: !!conversionMap, hasApstraConfig: !!apstraConfig });
-              }}
-              style={{ 
-                backgroundColor: 'white', 
-                padding: '20px', 
-                borderRadius: '8px', 
-                border: '2px solid #dc3545', 
-                minWidth: '200px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#fffbfb';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-              }}
-            >
-              <h3 style={{ color: '#dc3545', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                3. Provision
-                <span style={{ fontSize: '1.2rem' }}>→</span>
-              </h3>
-              <p style={{ color: '#666', fontSize: '0.9rem' }}>Upload Excel files, map data, and provision network configurations</p>
-            </div>
-            <div 
-              onClick={() => {
-                logger.logButtonClick('Tools Card', 'Main Dashboard');
-                setShowToolsPage(true);
-                logger.logWorkflowStart('Apstra Tools', { trigger: 'dashboard_card' });
-              }}
-              style={{ 
-                backgroundColor: 'white', 
-                padding: '20px', 
-                borderRadius: '8px', 
-                border: '2px solid #6f42c1', 
-                minWidth: '200px',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#fdfbff';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-              }}
-            >
-              <h3 style={{ color: '#6f42c1', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                4. Tools
-                <span style={{ fontSize: '1.2rem' }}>→</span>
-              </h3>
-              <p style={{ color: '#666', fontSize: '0.9rem' }}>Search systems, IP addresses, and manage blueprints</p>
-            </div>
+            {NAVIGATION_ITEMS.map((navItem) => {
+              const handleClick = () => {
+                logger.logButtonClick(`${navItem.shortLabel} Card`, 'Main Dashboard');
+                
+                switch (navItem.id) {
+                  case 'apstra-connection':
+                    setShowApstraConfigManager(true);
+                    logger.logWorkflowStart('Apstra Connection Configuration', { trigger: 'dashboard_card' });
+                    break;
+                  case 'provisioning':
+                    setShowProvisioningPage(true);
+                    logger.logWorkflowStart('Network Provisioning', { trigger: 'dashboard_card', hasConversionMap: !!conversionMap, hasApstraConfig: !!apstraConfig });
+                    break;
+                  case 'tools':
+                    setShowToolsPage(true);
+                    logger.logWorkflowStart('Apstra Tools', { trigger: 'dashboard_card' });
+                    break;
+                  case 'conversion-map':
+                    setShowConversionManager(true);
+                    logger.logWorkflowStart('Conversion Map Management', { trigger: 'dashboard_card' });
+                    break;
+                }
+              };
+
+              const hoverStyles = getHoverStyles(navItem.id, isAuthenticated);
+
+              return (
+                <div 
+                  key={navItem.id}
+                  onClick={handleClick}
+                  style={getDashboardCardStyles(navItem.id, isAuthenticated)}
+                  onMouseEnter={(e) => {
+                    Object.assign(e.currentTarget.style, hoverStyles);
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'white';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                  }}
+                >
+                  <h3 style={{ 
+                    color: navItem.id === 'apstra-connection' ? (isAuthenticated ? '#28a745' : '#dc3545') : navItem.color, 
+                    marginBottom: '10px', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between' 
+                  }}>
+                    {navItem.label}
+                    <span style={{ fontSize: '1.2rem' }}>→</span>
+                  </h3>
+                  <p style={{ color: '#666', fontSize: '0.9rem' }}>{navItem.description}</p>
+                </div>
+              );
+            })}
           </div>
         </section>
       </main>

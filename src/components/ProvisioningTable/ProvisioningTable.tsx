@@ -1,6 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/tauri';
 import { NetworkConfigRow, ApstraConfig } from '../../types';
+import { Table } from '../common/Table/Table';
+import { useTable } from '../../hooks/useTable';
+import { renderApstraSystemButtonWithLookup } from '../../utils/apstraLinkHelpers';
+import { getBlueprintIdByLabel } from '../../utils/blueprintMapping';
+import { apstraApiService } from '../../services/ApstraApiService';
+import './ProvisioningTable.css';
 
 // Enhanced conversion map types
 interface FieldDefinition {
@@ -30,18 +36,6 @@ interface TableColumn {
   width: string;
   sortable: boolean;
 }
-import { renderApstraSystemButtonWithLookup } from '../../utils/apstraLinkHelpers';
-import { getBlueprintIdByLabel } from '../../utils/blueprintMapping';
-import { apstraApiService } from '../../services/ApstraApiService';
-import './ProvisioningTable.css';
-
-interface ProvisioningTableProps {
-  data: NetworkConfigRow[];
-  isLoading: boolean;
-  onProvision: (selectedRows: NetworkConfigRow[]) => void;
-  onDataUpdate?: (updatedData: NetworkConfigRow[]) => void;
-  apstraConfig?: ApstraConfig | null;
-}
 
 // Interface for comparison results
 interface ComparisonResult {
@@ -66,6 +60,14 @@ interface ComparisonSummary {
   newRowsAdded: number;
 }
 
+interface ProvisioningTableProps {
+  data: NetworkConfigRow[];
+  isLoading: boolean;
+  onProvision: (selectedRows: NetworkConfigRow[]) => void;
+  onDataUpdate?: (updatedData: NetworkConfigRow[]) => void;
+  apstraConfig?: ApstraConfig | null;
+}
+
 const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   data,
   isLoading,
@@ -74,8 +76,6 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   apstraConfig
 }) => {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
-  const [sortField, setSortField] = useState<keyof NetworkConfigRow | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [filterText, setFilterText] = useState('');
   const [conversionMap, setConversionMap] = useState<EnhancedConversionMap | null>(null);
   const [comparisonResults, setComparisonResults] = useState<ComparisonResult[]>([]);
@@ -230,7 +230,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     return processedData;
   }, []);
 
-  const filteredAndSortedData = useMemo(() => {
+  const filteredData = useMemo(() => {
     // First, process LAG/Bond Names (auto-generate for lacp_active connections without LAG names)
     let processedData = processLagBondNames(data);
     
@@ -246,41 +246,19 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       );
     }
 
-    // Apply sorting or server grouping
-    if (sortField && !groupByServer) {
-      // When user explicitly sorts and grouping is disabled, apply normal sorting
-      filtered = [...filtered].sort((a, b) => {
-        const aValue = a[sortField];
-        const bValue = b[sortField];
-        
-        if (aValue === null || aValue === undefined) return 1;
-        if (bValue === null || bValue === undefined) return -1;
-        
-        let comparison = 0;
-        if (aValue < bValue) comparison = -1;
-        else if (aValue > bValue) comparison = 1;
-        
-        return sortDirection === 'asc' ? comparison : -comparison;
-      });
-    } else if (groupByServer) {
-      // Apply server grouping (default behavior)
-      filtered = groupConnectionsByServer(filtered);
-    } else {
-      // No sorting or grouping, return as-is
-      filtered = [...filtered];
-    }
-
     return filtered;
-  }, [data, filterText, sortField, sortDirection, groupByServer, processLagBondNames]);
+  }, [data, filterText, processLagBondNames]);
 
-  const handleSort = (field: keyof NetworkConfigRow) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
+  const { sortedData, sortKey, sortOrder, handleSort } = useTable({
+    initialData: filteredData,
+  });
+
+  const groupedData = useMemo(() => {
+    if (groupByServer) {
+      return groupConnectionsByServer(sortedData);
     }
-  };
+    return sortedData;
+  }, [sortedData, groupByServer]);
 
   const handleRowSelect = (index: number) => {
     const newSelected = new Set(selectedRows);
@@ -293,15 +271,15 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   };
 
   const handleSelectAll = () => {
-    if (selectedRows.size === filteredAndSortedData.length) {
+    if (selectedRows.size === groupedData.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(filteredAndSortedData.map((_, index) => index)));
+      setSelectedRows(new Set(groupedData.map((_, index) => index)));
     }
   };
 
   const handleProvision = () => {
-    const rowsToProvision = filteredAndSortedData.filter((_, index) => selectedRows.has(index));
+    const rowsToProvision = groupedData.filter((_, index) => selectedRows.has(index));
     onProvision(rowsToProvision);
   };
 
@@ -338,8 +316,10 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const uniqueSwitchLabels = [...new Set(data.map(row => row.switch_label).filter(Boolean))] as string[];
       
 
-      // Query Apstra for connectivity data with switch label filtering for optimization
+      // Query Apstra using connectivity-templates-query only (comprehensive query with CT data)
       const connectivityResponse = await apstraApiService.queryConnectivity(blueprintId, uniqueSwitchLabels);
+
+      console.log(`🔍 API Response: ${connectivityResponse.count} connectivity results with CT data`);
 
       // Compare the API results with table data and add missing rows
       const { comparisonResults, newRowsAdded, updatedData, apiDataMap: responseApiDataMap } = compareAndUpdateConnectivityData(data, connectivityResponse.items);
@@ -397,7 +377,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       let hasApiLagData = false;
       
       lagConnections.forEach(row => {
-        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
         const apiData = apiDataMap.get(connectionKey);
         
         if (apiData) {
@@ -420,7 +400,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         
         // Update each connection with its specific API LAG name
         lagConnections.forEach(row => {
-          const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+          const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
           const apiData = apiDataMap.get(connectionKey);
           const apiLagName = apiData?.ae1?.if_name || apiData?.ae_interface?.name || '';
           
@@ -458,17 +438,152 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       // Extract switch and server information from API result
       const switchName = item.switch?.label || item.switch?.hostname;
       const serverName = item.server?.label || item.server?.hostname;
-      const switchInterface = item.switch_intf?.if_name || item.intf1?.if_name;
-      const serverInterface = item.server_intf?.if_name || item.intf2?.if_name;
       
-      if (switchName && serverName && switchInterface) {
-        // Use switch_label + server_label + switch_ifname as key for duplicate detection
-        const connectionKey = `${switchName}-${serverName}-${switchInterface}`;
+      // CRITICAL FIX: More robust interface name extraction to prevent key collisions
+      // The fallback logic was causing different interfaces to get the same connection key
+      
+      // Prioritize switch_intf for switch interface extraction
+      let switchInterface = item.switch_intf?.if_name;
+      
+      // CRITICAL: Handle both connectivity query and connectivity-templates query
+      // The templates query uses ae1.if_name -> intf1.if_name structure
+      if (!switchInterface && item.intf1?.if_name) {
+        // Additional validation: check if intf1 looks like a switch interface (e.g., et-0/0/X)
+        const intf1Name = item.intf1.if_name;
+        const serverIntf = item.server_intf?.if_name || item.intf2?.if_name;
+        
+        // Only use intf1 as switch interface if it's clearly different from server interface
+        // OR if this is from connectivity-templates query (indicated by presence of ae1)
+        if (item.ae1 || !serverIntf || intf1Name !== serverIntf) {
+          switchInterface = intf1Name;
+        }
+      }
+      
+      // Server interface extraction with similar validation
+      let serverInterface = item.server_intf?.if_name;  
+      if (!serverInterface && item.intf2?.if_name) {
+        const intf2Name = item.intf2.if_name;
+        // Only use intf2 if it's different from the switch interface we extracted
+        if (!switchInterface || intf2Name !== switchInterface) {
+          serverInterface = intf2Name;
+        }
+      }
+      
+      // DEBUG: Identify interface extraction patterns that might cause key collision
+      if (switchName && (item.switch_intf?.if_name !== item.intf1?.if_name)) {
+        console.log(`🔍 Interface extraction mismatch for ${switchName}:`, {
+          switch_intf_if_name: item.switch_intf?.if_name,
+          intf1_if_name: item.intf1?.if_name,
+          using_switch_interface: switchInterface,
+          potential_key_collision: !item.switch_intf?.if_name && item.intf1?.if_name
+        });
+      }
+      
+      
+      
+      // CRITICAL: Only create connection key if we have both switchName and a VALID switchInterface
+      // Also ensure the switchInterface looks like a valid interface name
+      if (switchName && switchInterface && switchInterface.trim().length > 0) {
+        // Use switch_label + switch_ifname as key - keep original format for Excel matching
+        const connectionKey = `${switchName}-${switchInterface}`;
+        
+        // DEBUG: Log connection key generation (reduced verbosity after query fix)
+        if (item.ct_names || item.CT?.label) {
+          console.log(`🔑 Connection key "${connectionKey}" with CT data:`, {
+            ct_data: item.ct_names || item.CT?.label,
+            used_fallback: !item.switch_intf?.if_name && item.intf1?.if_name
+          });
+        }
+        
+        // Enhanced debugging for AE interface and CT data association
+        if (item.ae1?.if_name || item.ct_names || item.CT) {
+          console.log(`📊 Processing API chunk for ${connectionKey}:`, {
+            switchInterface: switchInterface,
+            ae1_if_name: item.ae1?.if_name,
+            ct_names: item.ct_names, 
+            CT_label: item.CT?.label,
+            server: serverName,
+            switch: switchName
+          });
+        }
+        
+        // Specific debugging for the problem case - USE ERROR LEVEL TO MAKE IT VISIBLE
+        if (switchName === 'CRL01P24L09' && switchInterface === 'et-0/0/45') {
+          console.error(`🎯🚨 PROBLEM CASE - CRL01P24L09 et-0/0/45:`, {
+            connectionKey: connectionKey,
+            ct_names: item.ct_names,
+            CT_label: item.CT?.label,
+            expected: 'VN-2065-tagged',
+            ae1_if_name: item.ae1?.if_name,
+            has_ct_data: !!(item.ct_names || item.CT)
+          });
+        }
+        
+        // Also debug any VN-2064-tagged or VN-2065-tagged CT assignments - USE ERROR LEVEL
+        if (item.ct_names && (item.ct_names.includes('VN-2064-tagged') || item.ct_names.includes('VN-2065-tagged'))) {
+          console.error(`🏷️🚨 VN TAG ASSIGNMENT:`, {
+            ct_names: item.ct_names,
+            switch: switchName,
+            interface: switchInterface,
+            connectionKey: connectionKey,
+            server: serverName
+          });
+        }
         
         // Check if this connection already exists in our map
         const existingData = apiConnectionsMap.get(connectionKey);
         
         if (existingData) {
+          // CRITICAL FIX: Handle CT data collection BEFORE creating merged object
+          // The connectivity-templates-query returns multiple results with CT.label for same connection
+          const existingCTs = existingData.rawData?.ct_names || existingData.rawData?.CT?.label || '';
+          const newCTs = item.ct_names || item.CT?.label || '';
+          
+          // Enhanced debug logging for specific connection
+          if (connectionKey.includes('CRL01P24L09-et-0/0/45')) {
+            console.log(`🔍 CT MERGING DEBUG - ${connectionKey}:`, {
+              switchName: switchName,
+              switchInterface: switchInterface,
+              serverName: serverName,
+              existingCTs: existingCTs,
+              newCTs: newCTs,
+              item_ct_names: item.ct_names,
+              item_CT_label: item.CT?.label,
+              existing_rawData_ct_names: existingData.rawData?.ct_names,
+              existing_rawData_CT_label: existingData.rawData?.CT?.label,
+              full_item: item,
+              full_existing: existingData.rawData
+            });
+          }
+          
+          let mergedCtNames = '';
+          if (newCTs && existingCTs) {
+            // Both exist - merge and deduplicate
+            const existingList = existingCTs.split(',').map((ct: string) => ct.trim()).filter((ct: string) => ct);
+            const newList = newCTs.split(',').map((ct: string) => ct.trim()).filter((ct: string) => ct);
+            const combinedList = [...new Set([...existingList, ...newList])];
+            mergedCtNames = combinedList.join(',');
+            
+            console.log(`📋 CT data merged for ${connectionKey}:`, {
+              switch: switchName,
+              interface: switchInterface,
+              existing: existingCTs,
+              new: newCTs,
+              result: mergedCtNames
+            });
+          } else if (newCTs && !existingCTs) {
+            // Use new CT if existing is empty
+            mergedCtNames = newCTs;
+            console.log(`📋 New CT data for ${connectionKey}:`, {
+              switch: switchName,
+              interface: switchInterface,
+              ct_data: mergedCtNames
+            });
+          } else if (existingCTs && !newCTs) {
+            // Keep existing CT if new is empty
+            mergedCtNames = existingCTs;
+          }
+
           // Merge the data - combine all fields from both chunks
           const mergedRawData = {
             ...existingData.rawData,
@@ -484,7 +599,8 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             // Ensure LAG/aggregation fields are preserved from both chunks
             ae1: existingData.rawData?.ae1 || item.ae1,
             evpn1: existingData.rawData?.evpn1 || item.evpn1,
-            ct_names: existingData.rawData?.ct_names || item.ct_names,
+            // Use merged CT data instead of simple OR operation
+            ct_names: mergedCtNames,
             ae_interface: existingData.rawData?.ae_interface || item.ae_interface
           };
           
@@ -503,21 +619,48 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             mergedRawData.evpn1 = { ...mergedRawData.evpn1, lag_mode: item.evpn1.lag_mode };
           }
           
-          // If this chunk has CT names and the existing doesn't, use it
-          if (item.ct_names && !existingData.rawData?.ct_names) {
-            mergedRawData.ct_names = item.ct_names;
-          }
-          
-          // If this chunk has CT node data and the existing doesn't, use it
+          // Preserve CT object structure if available
           if (item.CT && !existingData.rawData?.CT) {
             mergedRawData.CT = item.CT;
           }
           
+          // IMPORTANT: Handle updated connectivity templates query structure
+          // The new query uses ae1 and intf1 for CT data extraction
+          if (!mergedRawData.ae1 && item.ae1) {
+            mergedRawData.ae1 = item.ae1;
+          }
+          if (!mergedRawData.intf1 && item.intf1) {
+            mergedRawData.intf1 = item.intf1;
+          }
+          
           console.log(`🔗 Merging API data chunks for ${connectionKey}:`, {
-            existing: existingData.rawData,
-            new: item,
-            merged: mergedRawData
+            switchInterface: switchInterface,
+            existing_ct_names: existingData.rawData?.ct_names,
+            existing_CT_label: existingData.rawData?.CT?.label,
+            new_ct_names: item.ct_names,
+            new_CT_label: item.CT?.label,
+            merged_ct_names: mergedRawData.ct_names,
+            merged_CT_label: mergedRawData.CT?.label,
+            existing_ae1: existingData.rawData?.ae1?.if_name,
+            new_ae1: item.ae1?.if_name
           });
+          
+          // Specific debugging for the problem case during merging - USE ERROR LEVEL
+          if (switchName === 'CRL01P24L09' && switchInterface === 'et-0/0/45') {
+            console.error(`🚨💥 MERGING PROBLEM CASE - CRL01P24L09 et-0/0/45:`, {
+              before_merge_ct: existingData.rawData?.ct_names,
+              before_merge_CT: existingData.rawData?.CT?.label,
+              new_chunk_ct: item.ct_names,
+              new_chunk_CT: item.CT?.label,
+              will_merge_ct_names: !!(item.ct_names && !existingData.rawData?.ct_names),
+              will_merge_CT: !!(item.CT && !existingData.rawData?.CT),
+              after_merge_ct: mergedRawData.ct_names,
+              after_merge_CT: mergedRawData.CT?.label,
+              expected: 'VN-2065-tagged',
+              actual_will_be: mergedRawData.ct_names || mergedRawData.CT?.label,
+              is_correct: (mergedRawData.ct_names || mergedRawData.CT?.label) === 'VN-2065-tagged'
+            });
+          }
           
           apiConnectionsMap.set(connectionKey, {
             switchName,
@@ -527,13 +670,63 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             rawData: mergedRawData
           });
         } else {
-          // First time seeing this connection
+          // First time seeing this connection - ensure CT data is properly stored
+          const ctData = item.ct_names || item.CT?.label || '';
+          
+          // Enhanced debug logging for specific connection
+          if (connectionKey.includes('CRL01P24L09-et-0/0/45')) {
+            console.log(`🔍 FIRST TIME DEBUG - ${connectionKey}:`, {
+              switchName: switchName,
+              switchInterface: switchInterface,
+              serverName: serverName,
+              item_ct_names: item.ct_names,
+              item_CT_label: item.CT?.label,
+              extracted_ct_data: ctData,
+              full_item: item
+            });
+          }
+          
+          // Log initial AE/CT data with proper CT extraction
+          if (item.ae1?.if_name || ctData) {
+            console.log(`🆕 First time processing connection ${connectionKey}:`, {
+              switch: switchName,
+              interface: switchInterface,
+              switchInterface: switchInterface,
+              ae1_if_name: item.ae1?.if_name,
+              ct_names: item.ct_names,
+              CT_label: item.CT?.label,
+              extracted_ct_data: ctData
+            });
+          }
+          
+          // Store the raw data with properly extracted CT information
+          const rawData = {
+            ...item,
+            // Ensure ct_names is available from either source
+            ct_names: ctData || item.ct_names
+          };
+          
           apiConnectionsMap.set(connectionKey, {
             switchName,
             serverName,
             switchInterface,
             serverInterface,
-            rawData: item
+            rawData
+          });
+        }
+      } else {
+        // Log when we skip API chunks due to invalid interface extraction
+        if (switchName) {
+          console.warn(`⚠️ Skipping API chunk due to invalid interface extraction:`, {
+            switchName: switchName,
+            serverName: serverName,
+            extracted_switch_interface: switchInterface,
+            switch_intf_if_name: item.switch_intf?.if_name,
+            intf1_if_name: item.intf1?.if_name,
+            intf2_if_name: item.intf2?.if_name,
+            server_intf_if_name: item.server_intf?.if_name,
+            ct_data: item.ct_names || item.CT?.label || 'none',
+            reason: !switchName ? 'missing_switch_name' : !switchInterface ? 'missing_switch_interface' : 'validation_failed'
           });
         }
       }
@@ -542,8 +735,8 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     // Create a set of existing table connections for duplicate prevention
     const existingConnections = new Set<string>();
     tableData.forEach(row => {
-      if (row.switch_label && row.server_label && row.switch_ifname) {
-        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+      if (row.switch_label && row.switch_ifname) {
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
         existingConnections.add(connectionKey);
       }
     });
@@ -554,6 +747,18 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const serverName = row.server_label;
       const switchInterface = row.switch_ifname;
       const serverInterface = row.server_ifname;
+      
+      // Debug the specific problem row to see what it contains
+      if (switchName === 'CRL01P24L09' && switchInterface === 'et-0/0/45') {
+        console.error(`🔍 PROVISIONING TABLE ROW - CRL01P24L09 et-0/0/45:`, {
+          switch_label: row.switch_label,
+          switch_ifname: row.switch_ifname,
+          server_label: row.server_label,
+          current_ct_names: row.link_group_ct_names,
+          should_be: 'VN-2065-tagged',
+          showing_instead: row.link_group_ct_names
+        });
+      }
 
       if (!switchName || !serverName) {
         results.push({
@@ -565,7 +770,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       }
 
       // Try to find matching connection in API data using interface-level key
-      const connectionKey = `${switchName}-${serverName}-${switchInterface || ''}`;
+      const connectionKey = `${switchName}-${switchInterface || ''}`;
       const apiData = apiConnectionsMap.get(connectionKey);
       
       // Log only missing connections for troubleshooting
@@ -643,13 +848,43 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     // First, capture ALL the merged data from apiConnectionsMap before any deletions
     [...apiConnectionsMap.entries()].forEach(([connectionKey, connectionData]) => {
       finalApiDataMap.set(connectionKey, connectionData.rawData);
+      
+      // Debug the specific problem connection in final API data map
+      if (connectionKey.includes('CRL01P24L09') && connectionKey.includes('et-0/0/45')) {
+        console.error(`🗃️ FINAL API DATA MAP - CRL01P24L09 et-0/0/45:`, {
+          connectionKey: connectionKey,
+          stored_ct_names: connectionData.rawData?.ct_names,
+          stored_CT_label: connectionData.rawData?.CT?.label,
+          stored_ae1: connectionData.rawData?.ae1?.if_name,
+          full_stored_data: connectionData.rawData
+        });
+      }
     });
     
     // Also capture the original connection data from earlier processing for extra safety
     results.forEach(result => {
       if (result.status === 'match' && result.tableRow && result.apiData) {
         const row = result.tableRow;
-        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
+        
+        // Debug the specific problem case in results processing - USE ERROR LEVEL
+        if (connectionKey.includes('CRL01P24L09') && connectionKey.includes('et-0/0/45')) {
+          console.error(`📋 RESULTS PROCESSING - CRL01P24L09 et-0/0/45:`, {
+            connectionKey: connectionKey,
+            result_apiData_ct_names: result.apiData?.ct_names,
+            result_apiData_rawData_ct_names: result.apiData?.rawData?.ct_names,
+            result_apiData_CT_label: result.apiData?.CT?.label,
+            result_apiData_rawData_CT_label: result.apiData?.rawData?.CT?.label,
+            what_will_be_stored: (result.apiData.rawData || result.apiData),
+            stored_ct_data: {
+              ct_names: (result.apiData.rawData || result.apiData)?.ct_names,
+              CT_label: (result.apiData.rawData || result.apiData)?.CT?.label,
+              rawData_ct_names: (result.apiData.rawData || result.apiData)?.rawData?.ct_names,
+              rawData_CT_label: (result.apiData.rawData || result.apiData)?.rawData?.CT?.label
+            }
+          });
+        }
+        
         finalApiDataMap.set(connectionKey, result.apiData.rawData || result.apiData);
       }
     });
@@ -702,7 +937,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       let allConnectionsHaveApiData = true;
       
       lagConnections.forEach(row => {
-        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
         const apiData = apiDataMap.get(connectionKey);
         
         if (apiData) {
@@ -722,7 +957,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const lagGroupMatches = allConnectionsHaveApiData && apiLagNames.size === 1;
       
       lagConnections.forEach(row => {
-        const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
         lagValidationResults.set(connectionKey, lagGroupMatches);
       });
       
@@ -768,6 +1003,29 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     const apiLagIfname = apiData.ae1?.if_name || apiData.rawData?.ae1?.if_name || apiData.ae_interface?.name || apiData.rawData?.ae_interface?.name || '';
     const apiExternal = apiData.is_external || apiData.rawData?.is_external || false;
 
+    // CT comparison with proper comma-separated list handling
+    const excelCTs = (row.link_group_ct_names || '').split(',').map((ct: string) => ct.trim()).filter((ct: string) => ct).sort();
+    const apiCTsList = (apiCtNames || '').split(',').map((ct: string) => ct.trim()).filter((ct: string) => ct).sort();
+    const ctNamesMatch = JSON.stringify(excelCTs) === JSON.stringify(apiCTsList);
+
+    // Debug the specific problem case during field comparison
+    if (row.switch_label === 'CRL01P24L09' && row.switch_ifname === 'et-0/0/45') {
+      console.error(`🔍 FIELD COMPARISON - CRL01P24L09 et-0/0/45:`, {
+        table_ct_names: row.link_group_ct_names,
+        api_ct_names: apiCtNames,
+        excel_cts_parsed: excelCTs,
+        api_cts_parsed: apiCTsList,
+        api_data_paths: {
+          ct_names: apiData.ct_names,
+          rawData_ct_names: apiData.rawData?.ct_names,
+          CT_label: apiData.CT?.label,
+          rawData_CT_label: apiData.rawData?.CT?.label
+        },
+        will_match: ctNamesMatch,
+        full_api_data: apiData
+      });
+    }
+
     // Normalize speeds for comparison
     const tableSpeedNormalized = normalizeSpeed(row.link_speed || '');
     const apiSpeedNormalized = normalizeSpeed(apiSpeedRaw);
@@ -776,7 +1034,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     let lagIfnameMatches = false;
     if (lagGroupValidation && row.link_group_ifname) {
       // Use group validation results for LAG name matching
-      const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+      const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
       lagIfnameMatches = lagGroupValidation.get(connectionKey) || false;
     } else {
       // Fallback to simple field comparison for non-LAG connections
@@ -788,7 +1046,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       server_ifname: (row.server_ifname || '') === apiServerInterface,
       link_speed: tableSpeedNormalized === apiSpeedNormalized,
       link_group_lag_mode: (row.link_group_lag_mode || '') === apiLagMode,
-      link_group_ct_names: (row.link_group_ct_names || '') === apiCtNames,
+      link_group_ct_names: ctNamesMatch,
       link_group_ifname: lagIfnameMatches,
       is_external: row.is_external === apiExternal
     };
@@ -804,9 +1062,9 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
 
   // Helper function to get server data from API results (for rendering as button)
   const getServerApiData = (row: NetworkConfigRow): any | null => {
-    if (!row.switch_label || !row.server_label || !row.switch_ifname) return null;
+    if (!row.switch_label || !row.switch_ifname) return null;
     
-    const connectionKey = `${row.switch_label}-${row.server_label}-${row.switch_ifname}`;
+    const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
     return apiDataMap.get(connectionKey) || null;
   };
 
@@ -830,6 +1088,62 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         return value.toString();
       default:
         return value.toString();
+    }
+  };
+
+  // Generate enhanced tooltips showing Apstra comparison data
+  const getEnhancedTooltip = (value: any, columnKey: string, row: NetworkConfigRow): string => {
+    const formattedValue = formatCellValue(value, columnKey);
+    const apiData = getServerApiData(row);
+    const hasApiDataAvailable = apiDataMap.size > 0;
+
+    // Handle special cases first
+    if (row?.comment === 'Only in Blueprint') {
+      return `Found only in Apstra Blueprint: ${formattedValue}`;
+    }
+
+    if (!hasApiDataAvailable) {
+      return `Excel value: ${formattedValue} (API not fetched yet)`;
+    }
+
+    if (!apiData) {
+      return `Excel value: ${formattedValue} (not found in Apstra Blueprint)`;
+    }
+
+    // Get API value for comparison
+    let apiValue: any;
+    switch (columnKey) {
+      case 'server_ifname':
+        apiValue = apiData.server_intf?.if_name || apiData.intf2?.if_name || '';
+        break;
+      case 'link_speed':
+        const apiSpeedRaw = apiData.link1?.speed || '';
+        apiValue = apiSpeedRaw ? (apiSpeedRaw.match(/[GM]$/) ? apiSpeedRaw : `${apiSpeedRaw} Gbps`) : '';
+        break;
+      case 'link_group_lag_mode':
+        apiValue = apiData.evpn1?.lag_mode || apiData.lag_mode || '';
+        break;
+      case 'link_group_ct_names':
+        apiValue = apiData.ct_names || apiData.CT?.label || '';
+        break;
+      case 'link_group_ifname':
+        apiValue = apiData.ae1?.if_name || apiData.ae_interface?.name || '';
+        break;
+      case 'is_external':
+        const apiExternal = apiData.is_external || false;
+        apiValue = apiExternal === true ? 'Yes' : apiExternal === false ? 'No' : '';
+        break;
+      default:
+        apiValue = '';
+    }
+
+    const apiFormatted = formatCellValue(apiValue, columnKey);
+    const matches = formattedValue === apiFormatted;
+
+    if (matches) {
+      return `Excel: ${formattedValue} ✓ (matches Apstra)`;
+    } else {
+      return `Excel: ${formattedValue}\nApstra: ${apiFormatted || 'N/A'}\n⚠️ Values differ`;
     }
   };
 
@@ -958,6 +1272,61 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
     return formatCellValue(value, columnKey);
   };
 
+  const tableColumns = useMemo(() => {
+    return [
+      {
+        key: 'select',
+        header: (
+          <input
+            type="checkbox"
+            checked={selectedRows.size === groupedData.length && groupedData.length > 0}
+            onChange={handleSelectAll}
+            title="Select all visible rows"
+          />
+        ),
+        render: (row: any, index: number) => (
+          <input
+            type="checkbox"
+            checked={selectedRows.has(index)}
+            onChange={() => handleRowSelect(index)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+      },
+      ...columns.map((column) => ({
+        key: column.key,
+        header: (
+          <div className="header-content">
+            {column.header.split('\n').map((line, index) => (
+              <div key={index}>{line}</div>
+            ))}
+            {column.sortable && sortKey === column.key && (
+              <span className="sort-indicator">
+                {sortOrder === 'asc' ? ' ▲' : ' ▼'}
+              </span>
+            )}
+          </div>
+        ),
+        render: (row: NetworkConfigRow) => (
+          <div
+            className={getCellClass(
+              row[column.key as keyof NetworkConfigRow],
+              column.key,
+              row
+            )}
+            title={getEnhancedTooltip(
+              row[column.key as keyof NetworkConfigRow],
+              column.key,
+              row
+            )}
+          >
+            {renderCellContent(row, column.key)}
+          </div>
+        ),
+      })),
+    ];
+  }, [columns, selectedRows, groupedData, sortKey, sortOrder]);
+
   if (isLoading) {
     return (
       <div className="provisioning-table-container">
@@ -979,7 +1348,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       <div className="table-controls">
         <div className="table-info">
           <span className="data-count">
-            Showing {filteredAndSortedData.length} of {data.length} rows
+            Showing {groupedData.length} of {data.length} rows
             {selectedRows.size > 0 && ` • ${selectedRows.size} selected`}
           </span>
           {apstraConfig && (
@@ -1024,66 +1393,13 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       </div>
 
       <div className="table-wrapper">
-        <table className="provisioning-table">
-          <thead>
-            <tr>
-              <th className="select-column">
-                <input
-                  type="checkbox"
-                  checked={selectedRows.size === filteredAndSortedData.length && filteredAndSortedData.length > 0}
-                  onChange={handleSelectAll}
-                  title="Select all visible rows"
-                />
-              </th>
-              {columns.map(column => (
-                <th 
-                  key={column.key} 
-                  style={{ minWidth: column.width }}
-                  className={column.sortable ? 'sortable' : ''}
-                  onClick={column.sortable ? () => handleSort(column.key as keyof NetworkConfigRow) : undefined}
-                >
-                  <div className="header-content">
-                    {column.header.split('\n').map((line, index) => (
-                      <div key={index}>{line}</div>
-                    ))}
-                    {column.sortable && sortField === column.key && (
-                      <span className="sort-indicator">
-                        {sortDirection === 'asc' ? ' ↑' : ' ↓'}
-                      </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndSortedData.map((row, index) => (
-              <tr 
-                key={index}
-                className={selectedRows.has(index) ? 'selected' : ''}
-                onClick={() => handleRowSelect(index)}
-              >
-                <td className="select-column">
-                  <input
-                    type="checkbox"
-                    checked={selectedRows.has(index)}
-                    onChange={() => handleRowSelect(index)}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                </td>
-                {columns.map(column => (
-                  <td 
-                    key={column.key}
-                    className={getCellClass(row[column.key as keyof NetworkConfigRow], column.key, row)}
-                    title={formatCellValue(row[column.key as keyof NetworkConfigRow], column.key)}
-                  >
-                    {renderCellContent(row, column.key)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <Table
+          data={groupedData}
+          columns={tableColumns}
+          onSort={handleSort}
+          sortKey={sortKey}
+          sortOrder={sortOrder}
+        />
       </div>
 
       {/* Comparison Results Section */}
@@ -1142,8 +1458,8 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
           <strong>Provisioning Summary:</strong>
           <ul>
             <li>Selected Rows: {selectedRows.size}</li>
-            <li>Switches: {new Set(filteredAndSortedData.filter((_, i) => selectedRows.has(i)).map(r => r.switch_label).filter(Boolean)).size}</li>
-            <li>Servers: {new Set(filteredAndSortedData.filter((_, i) => selectedRows.has(i)).map(r => r.server_label).filter(Boolean)).size}</li>
+            <li>Switches: {new Set(groupedData.filter((_, i) => selectedRows.has(i)).map(r => r.switch_label).filter(Boolean)).size}</li>
+            <li>Servers: {new Set(groupedData.filter((_, i) => selectedRows.has(i)).map(r => r.server_label).filter(Boolean)).size}</li>
             {data.some(row => row.comment === 'Only in Blueprint') && (
               <li><span className="blueprint-legend">🔗 Blue highlighted rows: Connections found only in Blueprint (not in Excel)</span></li>
             )}

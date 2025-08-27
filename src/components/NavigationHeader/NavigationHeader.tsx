@@ -4,6 +4,7 @@ import { save } from '@tauri-apps/api/dialog';
 import { writeTextFile } from '@tauri-apps/api/fs';
 import { logger } from '../../services/LoggingService';
 import { useAuthStatus } from '../../hooks/useAuthStatus';
+import { NAVIGATION_ITEMS } from '../../config/navigation';
 import './NavigationHeader.css';
 
 interface NavigationHeaderProps {
@@ -119,31 +120,21 @@ const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         </div>
         
         <div className="nav-buttons">
-          <button 
-            onClick={() => handleNavigation('apstra-connection')}
-            className={`nav-btn ${currentPage === 'apstra-connection' ? 'active' : ''} ${isApstraAuthenticated ? 'authenticated' : ''}`}
-            title={isApstraAuthenticated ? 'Connected to Apstra' : 'Not connected to Apstra'}
-          >
-            {isApstraAuthenticated ? '✅ 1. Apstra Connection' : '1. Apstra Connection'}
-          </button>
-          <button 
-            onClick={() => handleNavigation('conversion-map')}
-            className={`nav-btn ${currentPage === 'conversion-map' ? 'active' : ''}`}
-          >
-            2. Conversion Map
-          </button>
-          <button 
-            onClick={() => handleNavigation('provisioning')}
-            className={`nav-btn ${currentPage === 'provisioning' ? 'active' : ''}`}
-          >
-            3. Provisioning
-          </button>
-          <button 
-            onClick={() => handleNavigation('tools')}
-            className={`nav-btn ${currentPage === 'tools' ? 'active' : ''}`}
-          >
-            4. Tools
-          </button>
+          {NAVIGATION_ITEMS.map((navItem) => {
+            const isActive = currentPage === navItem.id;
+            const isAuthenticatedItem = navItem.id === 'apstra-connection' && isApstraAuthenticated;
+            
+            return (
+              <button 
+                key={navItem.id}
+                onClick={() => handleNavigation(navItem.id)}
+                className={`nav-btn ${isActive ? 'active' : ''} ${isAuthenticatedItem ? 'authenticated' : ''}`}
+                title={navItem.id === 'apstra-connection' ? (isApstraAuthenticated ? 'Connected to Apstra' : 'Not connected to Apstra') : navItem.description}
+              >
+                {isAuthenticatedItem ? `✅ ${navItem.label}` : navItem.label}
+              </button>
+            );
+          })}
           
           {/* Log Download Button */}
           <button
