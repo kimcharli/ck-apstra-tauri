@@ -247,6 +247,8 @@ pub async fn load_apstra_queries() -> Result<ApiResult<HashMap<String, String>>,
     queries.insert("connectivity_templates_query".to_string(), include_str!("../../../data/queries/connectivity-templates-query.gql").to_string());
     queries.insert("system_search_query".to_string(), include_str!("../../../data/queries/system_search_query.gql").to_string());
     queries.insert("blueprint_leafs_query".to_string(), include_str!("../../../data/queries/blueprint_leafs_query.gql").to_string());
+    queries.insert("system_with_topology_query".to_string(), include_str!("../../../data/queries/system_with_topology_query.gql").to_string());
+    queries.insert("ip_with_topology_query".to_string(), include_str!("../../../data/queries/ip_with_topology_query.gql").to_string());
     
     log::info!("Successfully loaded {} query templates", queries.len());
     Ok(ApiResult::success(queries))

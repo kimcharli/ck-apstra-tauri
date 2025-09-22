@@ -143,9 +143,11 @@ impl ApstraApiClient {
         }
     }
 
-    /// Search for systems by server name using the provided query format
+    /// Search for systems by server name using template from data/queries/system_search_query.gql
     pub async fn search_systems(&self, blueprint_id: &str, server_name: &str) -> Result<QueryResponse, ApstraApiError> {
-        let query = format!("match(node('system', label='{}', name='system'))", server_name);
+        // Load query template from file and substitute parameter
+        let template = include_str!("../../../data/queries/system_search_query.gql");
+        let query = template.replace("{server_name}", server_name);
         self.execute_query(blueprint_id, &query).await
     }
 
@@ -216,10 +218,13 @@ mod tests {
     }
 
     #[test]
-    fn test_query_format() {
+    fn test_query_template_substitution() {
         let server_name = "test-server";
         let expected_query = "match(node('system', label='test-server', name='system'))";
-        let query = format!("match(node('system', label='{}', name='system'))", server_name);
+
+        // Test template substitution matches expected format
+        let template = include_str!("../../../data/queries/system_search_query.gql");
+        let query = template.replace("{server_name}", server_name);
         assert_eq!(query, expected_query);
     }
 }

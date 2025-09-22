@@ -294,7 +294,7 @@ export class ApstraApiService {
       throw new Error('Not authenticated. Please login first.');
     }
 
-    const query = ApstraApiService.createSystemWithTopologyQuery(serverName);
+    const query = await ApstraApiService.createSystemWithTopologyQuery(serverName);
     return await this.executeQuery(blueprintId, query);
   }
 
@@ -306,7 +306,7 @@ export class ApstraApiService {
       throw new Error('Not authenticated. Please login first.');
     }
 
-    const query = ApstraApiService.createIPWithTopologyQuery(ipAddress);
+    const query = await ApstraApiService.createIPWithTopologyQuery(ipAddress);
     return await this.executeQuery(blueprintId, query);
   }
 
@@ -349,25 +349,24 @@ export class ApstraApiService {
   /**
    * Helper method to create a system search query with topology
    */
-  public static createSystemWithTopologyQuery(serverName: string): string {
-    const query = `match(
-      node('system', label='${serverName}', name='system')
-        .out().node('pod', name='pod'),
-      node(name='system')
-        .out().node('rack', name='rack')
-    )`;
+  public static async createSystemWithTopologyQuery(serverName: string): Promise<string> {
+    // Use instance method to access query templates
+    const instance = ApstraApiService.getInstance();
+    const query = await instance.getQuery('system_with_topology_query', {
+      server_name: serverName
+    });
     return ApstraApiService.normalizeQuery(query);
   }
 
   /**
    * Helper method to create an IP search query with topology
    */
-  public static createIPWithTopologyQuery(ipAddress: string): string {
-    const query = `match(
-      node('interface', ipv4_addr='${ipAddress}', name='intf').in_().node('system', name='system')
-        .out().node('pod', name='pod'),
-      node(name='system').out().node('rack', name='rack')
-    )`;
+  public static async createIPWithTopologyQuery(ipAddress: string): Promise<string> {
+    // Use instance method to access query templates
+    const instance = ApstraApiService.getInstance();
+    const query = await instance.getQuery('ip_with_topology_query', {
+      ip_address: ipAddress
+    });
     return ApstraApiService.normalizeQuery(query);
   }
 }
