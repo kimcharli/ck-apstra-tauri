@@ -66,6 +66,7 @@ interface ProvisioningTableProps {
   onProvision: (selectedRows: NetworkConfigRow[]) => void;
   onDataUpdate?: (updatedData: NetworkConfigRow[]) => void;
   apstraConfig?: ApstraConfig | null;
+  selectedBlueprint?: string;
 }
 
 const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
@@ -73,7 +74,8 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   isLoading,
   onProvision,
   onDataUpdate,
-  apstraConfig
+  apstraConfig,
+  selectedBlueprint
 }) => {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [filterText, setFilterText] = useState('');
@@ -84,6 +86,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   const [showComparisonResults, setShowComparisonResults] = useState(false);
   const [groupByServer, setGroupByServer] = useState(true);
   const [apiDataMap, setApiDataMap] = useState<Map<string, any>>(new Map());
+  const [hideNonApstraSwitches, setHideNonApstraSwitches] = useState(false);
 
   // Load the enhanced conversion map on component mount
   useEffect(() => {
@@ -232,21 +235,34 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
   const filteredData = useMemo(() => {
     // First, process LAG/Bond Names (auto-generate for lacp_active connections without LAG names)
     let processedData = processLagBondNames(data);
-    
+
     let filtered = processedData;
 
     // Apply text filter
     if (filterText) {
       const searchText = filterText.toLowerCase();
-      filtered = processedData.filter(row => 
-        Object.values(row).some(value => 
+      filtered = filtered.filter(row =>
+        Object.values(row).some(value =>
           value?.toString().toLowerCase().includes(searchText)
         )
       );
     }
 
+    // Filter out switches not present in Apstra if option is enabled
+    if (hideNonApstraSwitches && apiDataMap.size > 0) {
+      filtered = filtered.filter(row => {
+        if (!row.switch_label || !row.switch_ifname) {
+          // Keep rows without complete switch info (they might be valid)
+          return true;
+        }
+        const connectionKey = `${row.switch_label}-${row.switch_ifname}`;
+        // Keep the row if it exists in Apstra or if it's a blueprint-only connection
+        return apiDataMap.has(connectionKey) || row.comment === 'Only in Blueprint';
+      });
+    }
+
     return filtered;
-  }, [data, filterText, processLagBondNames]);
+  }, [data, filterText, processLagBondNames, hideNonApstraSwitches, apiDataMap]);
 
   const { sortedData, sortKey, sortOrder, handleSort } = useTable({
     initialData: filteredData,
@@ -304,10 +320,10 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         return;
       }
 
-      const defaultBlueprintName = 'DH4-Colo2';
-      const blueprintId = getBlueprintIdByLabel(defaultBlueprintName);
+      const blueprintName = selectedBlueprint || 'DH4-Colo2';
+      const blueprintId = getBlueprintIdByLabel(blueprintName);
       if (!blueprintId) {
-        alert(`Blueprint ${defaultBlueprintName} not found in mapping.`);
+        alert(`Blueprint ${blueprintName} not found in mapping.`);
         return;
       }
 
@@ -709,7 +725,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         const apiLagIfname = apiData.rawData?.ae1?.if_name || apiData.rawData?.ae_interface?.name || '';
         
         const newRow: NetworkConfigRow = {
-          blueprint: 'DH4-Colo2', // Use the same blueprint we queried
+          blueprint: selectedBlueprint || 'DH4-Colo2', // Use the selected blueprint
           switch_label: apiData.switchName,
           switch_ifname: apiData.switchInterface || '',
           server_label: apiData.serverName,
@@ -1101,20 +1117,20 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       const apstraHost = apstraApiService.getHost();
       
       if (apstraHost) {
-        // Use default blueprint (same as ToolsPage uses for its default)
-        // This matches the dropdown selection in ProvisioningPage defaulting to 'DH4-Colo2'
-        const defaultBlueprintName = 'DH4-Colo2';
-        const blueprintId = getBlueprintIdByLabel(defaultBlueprintName);
+        // Use the selected blueprint or fallback to default
+        const blueprintName = selectedBlueprint || 'DH4-Colo2';
+        console.log('🔍 Rendering switch link with blueprint:', blueprintName, 'for switch:', switchName);
+        const blueprintId = getBlueprintIdByLabel(blueprintName);
         
         if (blueprintId) {
           return renderApstraSystemButtonWithLookup(
             switchName,
             blueprintId,
-            defaultBlueprintName,
-            `Click to open switch ${switchName} in Apstra blueprint ${defaultBlueprintName}`
+            blueprintName,
+            `Click to open switch ${switchName} in Apstra blueprint ${blueprintName}`
           );
         } else {
-          console.log('❌ Blueprint ID not found for default blueprint:', defaultBlueprintName);
+          console.log('❌ Blueprint ID not found for blueprint:', blueprintName);
         }
       } else {
         console.log('❌ No Apstra connection available. ApstraApiService host:', apstraHost);
@@ -1135,19 +1151,19 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         const apstraHost = apstraApiService.getHost();
         
         if (apstraHost) {
-          const defaultBlueprintName = 'DH4-Colo2';
-          const blueprintId = getBlueprintIdByLabel(defaultBlueprintName);
+          const blueprintName = selectedBlueprint || 'DH4-Colo2';
+          const blueprintId = getBlueprintIdByLabel(blueprintName);
           
           if (blueprintId) {
             return renderApstraSystemButtonWithLookup(
               serverName,
               blueprintId,
-              defaultBlueprintName,
-              `Click to open server ${serverName} in Apstra blueprint ${defaultBlueprintName}`,
+              blueprintName,
+              `Click to open server ${serverName} in Apstra blueprint ${blueprintName}`,
               serverNodeId // Pass the preknown server node ID
             );
           } else {
-            console.log('❌ Blueprint ID not found for default blueprint:', defaultBlueprintName);
+            console.log('❌ Blueprint ID not found for blueprint:', blueprintName);
           }
         } else {
           console.log('❌ No Apstra connection available for server button. ApstraApiService host:', apstraHost);
@@ -1212,7 +1228,7 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
         ),
       })),
     ];
-  }, [columns, selectedRows, groupedData, sortKey, sortOrder]);
+  }, [columns, selectedRows, groupedData, sortKey, sortOrder, selectedBlueprint]);
 
   if (isLoading) {
     return (
@@ -1261,6 +1277,17 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
             />
             Group by Server
           </label>
+          {apiDataMap.size > 0 && (
+            <label className="group-toggle">
+              <input
+                type="checkbox"
+                checked={hideNonApstraSwitches}
+                onChange={(e) => setHideNonApstraSwitches(e.target.checked)}
+                title="Hide switches that are not present in Apstra"
+              />
+              Hide Non-Apstra Switches
+            </label>
+          )}
           <button
             onClick={handleFetchAndCompare}
             disabled={isComparingData || data.length === 0}

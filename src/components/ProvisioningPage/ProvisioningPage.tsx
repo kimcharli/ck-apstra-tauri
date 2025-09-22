@@ -8,6 +8,8 @@ import SheetSelector from '../SheetSelector/SheetSelector';
 import ProvisioningTable from '../ProvisioningTable/ProvisioningTable';
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary';
 import { logger } from '../../services/LoggingService';
+import { apstraApiService } from '../../services/ApstraApiService';
+import { blueprints } from '../../utils/blueprintMapping';
 import './ProvisioningPage.css';
 
 interface ProvisioningPageProps {
@@ -29,9 +31,10 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [tableData, setTableData] = useState<NetworkConfigRow[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
-  const [selectedBlueprint, setSelectedBlueprint] = useState<string>('DH4-Colo2');
+  const [selectedBlueprint, setSelectedBlueprint] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<'match' | 'mismatch' | 'blueprint' | 'ct-not-found' | 'xlsx-pending'>('match');
   const [blueprintValidation, setBlueprintValidation] = useState<{found: number, total: number} | null>(null);
+  const [isDetectingBlueprint, setIsDetectingBlueprint] = useState(false);
 
   const handleSheetsLoaded = (loadedSheets: string[], loadedFilePath: string) => {
     setSheets(loadedSheets);
@@ -44,6 +47,56 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
       sheets: loadedSheets 
     });
     logger.logFileOperation('Excel upload', loadedFilePath, 0, { sheets: loadedSheets });
+  };
+
+  const detectBlueprintFromSwitches = async (switchLabels: string[]) => {
+    setIsDetectingBlueprint(true);
+    try {
+      console.log('🔍 Auto-detecting blueprint from switches:', switchLabels.slice(0, 5));
+
+      // Map to track which blueprint each switch belongs to
+      const blueprintCounts = new Map<string, number>();
+
+      // Sample a subset of switches to detect blueprint (up to 5 for performance)
+      const samplesToCheck = switchLabels.slice(0, Math.min(5, switchLabels.length));
+
+      for (const switchName of samplesToCheck) {
+        try {
+          const result = await apstraApiService.searchSystemAcrossBlueprints(switchName, blueprints);
+          if (result && result.blueprintLabel) {
+            const count = blueprintCounts.get(result.blueprintLabel) || 0;
+            blueprintCounts.set(result.blueprintLabel, count + 1);
+            console.log(`✅ Switch "${switchName}" found in blueprint "${result.blueprintLabel}"`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Switch "${switchName}" not found in any blueprint`);
+        }
+      }
+
+      // Find the most common blueprint
+      if (blueprintCounts.size > 0) {
+        const [mostCommonBlueprint] = Array.from(blueprintCounts.entries())
+          .sort((a, b) => b[1] - a[1])[0];
+
+        console.log(`✅ Auto-detected blueprint: "${mostCommonBlueprint}" (found in ${blueprintCounts.get(mostCommonBlueprint)} switches)`);
+        setSelectedBlueprint(mostCommonBlueprint);
+
+        logger.logDataChange('BlueprintAutoDetected', 'detected', null, {
+          detectedBlueprint: mostCommonBlueprint,
+          samplesChecked: samplesToCheck.length,
+          blueprintCounts: Object.fromEntries(blueprintCounts)
+        });
+      } else {
+        console.log('⚠️ Could not auto-detect blueprint, defaulting to DH4-Colo2');
+        setSelectedBlueprint('DH4-Colo2');
+      }
+    } catch (error) {
+      console.error('❌ Error during blueprint detection:', error);
+      // Default to DH4-Colo2 if detection fails
+      setSelectedBlueprint('DH4-Colo2');
+    } finally {
+      setIsDetectingBlueprint(false);
+    }
   };
 
   const handleSheetSelect = async (sheetName: string) => {
@@ -75,7 +128,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
       const safeData = Array.isArray(parsedData) ? parsedData : [];
       setTableData(safeData);
       
-      // Simulate blueprint validation with safe data
+      // Auto-detect blueprint from data
       if (safeData.length > 0) {
         // Safe extraction of device names with fallback
         const switchLabels = safeData
@@ -84,17 +137,17 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
         const serverLabels = safeData
           .map(row => row?.server_label)
           .filter((label): label is string => typeof label === 'string' && label.length > 0);
-        
+
         const uniqueDevices = new Set([...switchLabels, ...serverLabels]);
         setBlueprintValidation({found: uniqueDevices.size, total: uniqueDevices.size});
-        
+
         console.log('✅ Blueprint validation completed:', {
           dataRows: safeData.length,
           uniqueDevices: uniqueDevices.size,
           switchCount: switchLabels.length,
           serverCount: serverLabels.length
         });
-        
+
         logger.logDataChange('ProvisioningData', 'loaded', null, {
           rowCount: safeData.length,
           uniqueDevices: uniqueDevices.size,
@@ -105,6 +158,14 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           uniqueDevices: uniqueDevices.size,
           blueprintValidation: {found: uniqueDevices.size, total: uniqueDevices.size}
         });
+
+        // Auto-detect blueprint if we have Apstra connection
+        if (apstraApiService.getHost() && switchLabels.length > 0) {
+          await detectBlueprintFromSwitches(switchLabels);
+        } else if (!selectedBlueprint) {
+          // Default to DH4-Colo2 if no auto-detection possible
+          setSelectedBlueprint('DH4-Colo2');
+        }
       } else {
         console.log('⚠️ No data rows found in parsed result');
         setBlueprintValidation(null);
@@ -241,12 +302,19 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           <div className="step-content">
             {tableData.length > 0 ? (
               <div className="blueprint-actions">
-                <select 
-                  value={selectedBlueprint} 
+                <select
+                  value={selectedBlueprint}
                   onChange={(e) => setSelectedBlueprint(e.target.value)}
                   className="blueprint-selector"
+                  disabled={isDetectingBlueprint}
                 >
-                  <option value="DH4-Colo2">DH4-Colo2</option>
+                  {isDetectingBlueprint ? (
+                    <option value="">Detecting blueprint...</option>
+                  ) : (
+                    blueprints.map(bp => (
+                      <option key={bp.label} value={bp.label}>{bp.label}</option>
+                    ))
+                  )}
                 </select>
                 <div className="action-buttons">
                   <button className="btn btn-info">Fetch & Compare</button>
@@ -261,9 +329,13 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
         </div>
       </div>
 
-      {blueprintValidation && (
+      {blueprintValidation && selectedBlueprint && (
         <div className="blueprint-validation">
-          Suggested blueprint '{selectedBlueprint}' ({selectedBlueprint.toLowerCase()}) found containing {blueprintValidation.found} of {blueprintValidation.total} devices.
+          {isDetectingBlueprint ? (
+            <>🔍 Detecting blueprint from switch data...</>
+          ) : (
+            <>Auto-detected blueprint: <strong>{selectedBlueprint}</strong> (contains {blueprintValidation.found} of {blueprintValidation.total} devices)</>
+          )}
         </div>
       )}
 
@@ -348,12 +420,13 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
                 <p>Try selecting a different sheet or re-uploading the Excel file.</p>
               </div>
             }>
-              <ProvisioningTable 
-                data={tableData} 
+              <ProvisioningTable
+                data={tableData}
                 isLoading={isLoadingData}
                 onProvision={handleProvisionData}
                 onDataUpdate={setTableData}
                 apstraConfig={apstraConfig}
+                selectedBlueprint={selectedBlueprint}
               />
             </ErrorBoundary>
           </div>
