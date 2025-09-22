@@ -349,8 +349,19 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       });
       setShowComparisonResults(true);
 
-      // Update the parent component's data if new rows were added
-      if (newRowsAdded > 0 && onDataUpdate) {
+      // Update the parent component's data if new rows were added OR if filtering occurred
+      const originalRowCount = data.length;
+      const filteredRowCount = updatedData.length;
+      const rowsWereFiltered = filteredRowCount < originalRowCount;
+
+      if ((newRowsAdded > 0 || rowsWereFiltered) && onDataUpdate) {
+        console.log(`📊 Updating parent data:`, {
+          originalRows: originalRowCount,
+          newRowsAdded,
+          filteredRows: filteredRowCount,
+          rowsRemoved: originalRowCount - filteredRowCount,
+          reason: newRowsAdded > 0 ? 'new_rows_added' : 'filtering_applied'
+        });
         onDataUpdate(updatedData);
       }
 
@@ -810,10 +821,42 @@ const ProvisioningTable: React.FC<ProvisioningTableProps> = ({
       }
     });
 
+    // FILTER OUT SWITCHES NOT IN BLUEPRINT
+    // Remove rows where the switch was not found in the API data (i.e., not in blueprint)
+    const switchesInBlueprint = new Set<string>();
+    apiConnectionsMap.forEach((connectionData, connectionKey) => {
+      if (connectionData.switchName) {
+        switchesInBlueprint.add(connectionData.switchName);
+      }
+    });
+
+    // Filter out rows where switch is not in the blueprint
+    const filteredData = groupedData.filter(row => {
+      if (!row.switch_label) {
+        // Keep rows without switch labels (shouldn't happen but be safe)
+        return true;
+      }
+
+      const isInBlueprint = switchesInBlueprint.has(row.switch_label);
+
+      if (!isInBlueprint) {
+        console.log(`🗑️ Filtering out switch not in blueprint: ${row.switch_label} (${row.switch_ifname || 'N/A'}) -> ${row.server_label || 'N/A'}`);
+      }
+
+      return isInBlueprint;
+    });
+
+    console.log(`🔍 Blueprint filtering results:`, {
+      originalRows: groupedData.length,
+      filteredRows: filteredData.length,
+      switchesInBlueprint: Array.from(switchesInBlueprint).sort(),
+      removedRows: groupedData.length - filteredData.length
+    });
+
     return {
       comparisonResults: results,
       newRowsAdded: newRows.length,
-      updatedData: groupedData,
+      updatedData: filteredData,
       apiDataMap: finalApiDataMap
     };
   };

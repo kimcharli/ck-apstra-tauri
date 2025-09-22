@@ -49,6 +49,7 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
     logger.logFileOperation('Excel upload', loadedFilePath, 0, { sheets: loadedSheets });
   };
 
+
   const detectBlueprintFromSwitches = async (switchLabels: string[]) => {
     setIsDetectingBlueprint(true);
     try {
@@ -73,12 +74,21 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
         }
       }
 
-      // Find the most common blueprint
+      // Find the most common blueprint (pick first one in case of ties)
       if (blueprintCounts.size > 0) {
-        const [mostCommonBlueprint] = Array.from(blueprintCounts.entries())
-          .sort((a, b) => b[1] - a[1])[0];
+        const sortedBlueprints = Array.from(blueprintCounts.entries())
+          .sort((a, b) => {
+            // Sort by count (descending), then by blueprint name (ascending) for consistent tie-breaking
+            if (b[1] !== a[1]) return b[1] - a[1];
+            return a[0].localeCompare(b[0]);
+          });
 
-        console.log(`✅ Auto-detected blueprint: "${mostCommonBlueprint}" (found in ${blueprintCounts.get(mostCommonBlueprint)} switches)`);
+        const [mostCommonBlueprint, count] = sortedBlueprints[0];
+
+        console.log(`✅ Auto-detected blueprint: "${mostCommonBlueprint}" (found in ${count} switches)`);
+        if (sortedBlueprints.length > 1) {
+          console.log(`📊 Other blueprints found:`, sortedBlueprints.slice(1).map(([bp, cnt]) => `${bp}: ${cnt}`));
+        }
         setSelectedBlueprint(mostCommonBlueprint);
 
         logger.logDataChange('BlueprintAutoDetected', 'detected', null, {
@@ -138,6 +148,12 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           .map(row => row?.server_label)
           .filter((label): label is string => typeof label === 'string' && label.length > 0);
 
+        // Debug: Log all unique switch labels to identify the source of STG15ANAE037
+        const uniqueSwitchLabels = [...new Set(switchLabels)];
+        const uniqueServerLabels = [...new Set(serverLabels)];
+        console.log('🔍 Debug - Unique switch labels from Excel:', uniqueSwitchLabels);
+        console.log('🔍 Debug - Unique server labels from Excel:', uniqueServerLabels);
+
         const uniqueDevices = new Set([...switchLabels, ...serverLabels]);
         setBlueprintValidation({found: uniqueDevices.size, total: uniqueDevices.size});
 
@@ -159,12 +175,15 @@ const ProvisioningPage: React.FC<ProvisioningPageProps> = ({
           blueprintValidation: {found: uniqueDevices.size, total: uniqueDevices.size}
         });
 
-        // Auto-detect blueprint if we have Apstra connection
-        if (apstraApiService.getHost() && switchLabels.length > 0) {
+        // Auto-detect blueprint if we have authenticated Apstra connection
+        if (apstraApiService.getAuthStatus() && switchLabels.length > 0) {
+          console.log('🔗 Apstra authenticated - running blueprint detection');
           await detectBlueprintFromSwitches(switchLabels);
-        } else if (!selectedBlueprint) {
-          // Default to DH4-Colo2 if no auto-detection possible
-          setSelectedBlueprint('DH4-Colo2');
+        } else {
+          console.log('⚠️ Apstra not authenticated - using default blueprint');
+          if (!selectedBlueprint) {
+            setSelectedBlueprint('DH4-Colo2');
+          }
         }
       } else {
         console.log('⚠️ No data rows found in parsed result');
