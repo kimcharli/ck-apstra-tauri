@@ -1,21 +1,10 @@
-// Apstra Domain Module
-// This module handles Apstra API integration, authentication, and system management
+pub mod commands;
+pub mod models;
+pub mod services;
 
-// Commands (to be migrated)
-// pub mod commands;
+pub use commands::*;
+pub use models::*;
+pub use services::*;
 
-// Services (to be migrated)
-// pub mod services;
-
-// Models (to be migrated)
-// pub mod models;
-
-// Utils (to be migrated)
-// pub mod utils;
-
-// Re-exports (to be added during migration)
-// pub use services::*;
-// pub use models::*;
-
-// Placeholder constant for initial structure
+// Domain identifier constant
 pub const APSTRA_DOMAIN: &str = "apstra";

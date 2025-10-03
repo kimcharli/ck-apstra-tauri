@@ -1,0 +1,430 @@
+/* Full-screen apstra config page */
+.apstra-config-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.apstra-config-content {
+  padding: 24px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.error-messages {
+  margin-bottom: 20px;
+}
+
+.error-message {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 4px;
+  color: #c00;
+  padding: 12px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 16px;
+  background-color: #fafafa;
+}
+
+.form-section h3 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 6px;
+}
+
+/* Table-style form layout */
+.config-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+
+.config-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.config-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.field-label {
+  width: 100px;
+  padding: 8px 12px 8px 0;
+  vertical-align: middle;
+  font-weight: 500;
+  color: #555;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.field-input {
+  padding: 8px 12px 8px 0;
+  vertical-align: middle;
+}
+
+.field-input input[type="text"],
+.field-input input[type="number"],
+.field-input input[type="password"] {
+  width: 100%;
+  max-width: 200px;
+  padding: 8px 12px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.field-input input[type="text"]:focus,
+.field-input input[type="number"]:focus,
+.field-input input[type="password"]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: normal;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-right: 8px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.field-unit {
+  margin-left: 8px;
+  color: #888;
+  font-size: 0.85rem;
+}
+
+/* Password input group adjustments for table layout */
+.field-input .password-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  max-width: 200px;
+}
+
+.field-input .password-input-group input {
+  flex: 1;
+  padding-right: 36px;
+  max-width: none;
+}
+
+.field-input .password-toggle {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: background-color 0.2s;
+}
+
+.field-input .password-toggle:hover {
+  background-color: #e0e0e0;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #555;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="password"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="password"]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.password-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-group input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.password-toggle:hover {
+  background-color: #e0e0e0;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin-right: 8px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+
+.apstra-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-top: 1px solid #e0e0e0;
+  background-color: #f8f9fa;
+  border-radius: 0 0 12px 12px;
+}
+
+.action-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.apstra-config-actions button {
+  padding: 10px 16px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  background-color: white;
+  color: #333;
+}
+
+.apstra-config-actions button:hover:not(:disabled) {
+  background-color: #f0f0f0;
+  border-color: #bbb;
+}
+
+.apstra-config-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.connect-button {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%) !important;
+  border: 2px solid #dc3545 !important;
+  color: white !important;
+  font-weight: 600 !important;
+  font-size: 1rem !important;
+  padding: 12px 24px !important;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4) !important;
+  transition: all 0.3s ease !important;
+  position: relative;
+  overflow: hidden;
+  animation: uncomfortable-pulse 2s infinite;
+}
+
+@keyframes uncomfortable-pulse {
+  0%, 100% { 
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.6);
+    transform: scale(1.02);
+  }
+}
+
+.connect-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #c82333 0%, #bd2130 100%) !important;
+  border-color: #bd2130 !important;
+  box-shadow: 0 6px 16px rgba(220, 53, 69, 0.5) !important;
+  transform: translateY(-2px) !important;
+}
+
+.connect-button.connected {
+  background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%) !important;
+  border-color: #28a745 !important;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3) !important;
+  animation: none !important;
+}
+
+.connect-button.connected:hover {
+  background: linear-gradient(135deg, #1e7e34 0%, #155724 100%) !important;
+  border-color: #1e7e34 !important;
+  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4) !important;
+}
+
+.connect-button.connected::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.test-button {
+  background-color: #17a2b8 !important;
+  border-color: #17a2b8 !important;
+  color: white !important;
+}
+
+.test-button.secondary {
+  background-color: #6c757d !important;
+  border-color: #6c757d !important;
+  font-size: 0.9rem !important;
+  padding: 10px 18px !important;
+}
+
+.test-button:hover:not(:disabled) {
+  background-color: #138496 !important;
+  border-color: #117a8b !important;
+}
+
+.test-button.secondary:hover:not(:disabled) {
+  background-color: #545b62 !important;
+  border-color: #494f54 !important;
+}
+
+.save-button {
+  background-color: #007bff !important;
+  border-color: #007bff !important;
+  color: white !important;
+}
+
+.save-button:hover:not(:disabled) {
+  background-color: #0056b3 !important;
+  border-color: #004085 !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .apstra-config-modal {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .apstra-config-content {
+    padding: 16px;
+  }
+  
+  .form-section {
+    padding: 16px;
+  }
+  
+  /* Stack table fields vertically on small screens */
+  .config-table tbody tr {
+    display: block;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+  
+  .config-table tbody tr:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  
+  .field-label, .field-input {
+    display: block;
+    width: 100%;
+    padding: 4px 0;
+    text-align: left;
+  }
+  
+  .field-label {
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  
+  .field-input input[type="text"],
+  .field-input input[type="number"],
+  .field-input input[type="password"] {
+    max-width: 100%;
+  }
+  
+  .field-input .password-input-group {
+    max-width: 100%;
+  }
+  
+  .apstra-config-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .action-group {
+    justify-content: center;
+  }
+}

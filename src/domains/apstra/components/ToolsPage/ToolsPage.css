@@ -1,0 +1,654 @@
+/* Full-screen tools page */
+.tools-page {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.tools-content {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Search Sections */
+.search-section {
+  margin-bottom: 32px;
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.search-section h2 {
+  margin: 0 0 20px 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 8px;
+}
+
+.search-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-inputs {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Authentication status indicators */
+.auth-status {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #007bff;
+}
+
+.auth-warning {
+  color: #856404;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  background-color: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.blueprint-select {
+  min-width: 200px;
+}
+
+/* Search results display */
+.search-results {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.search-results h4 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 1.1rem;
+}
+
+.results-display {
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  padding: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  color: #495057;
+}
+
+/* Uncomfortable/disabled state styling */
+.tools-content.not-authenticated {
+  filter: grayscale(0.7);
+}
+
+.auth-required-banner {
+  background: linear-gradient(135deg, #ffebee 0%, #fff3e0 100%);
+  border: 2px solid #ff9800;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+  animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+  0% {
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 16px rgba(255, 152, 0, 0.4);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+  }
+}
+
+.auth-banner-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.auth-warning-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.auth-message h3 {
+  margin: 0 0 8px 0;
+  color: #e65100;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.auth-message p {
+  margin: 0 0 16px 0;
+  color: #bf360c;
+  font-size: 0.95rem;
+}
+
+.connect-now-button {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.connect-now-button:hover {
+  background: linear-gradient(135deg, #f57c00 0%, #ef6c00 100%);
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+.search-section.disabled,
+.blueprints-section.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+  position: relative;
+}
+
+.search-section.disabled::before,
+.blueprints-section.disabled::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(128, 128, 128, 0.1);
+  border-radius: 8px;
+  z-index: 1;
+}
+
+.search-input {
+  padding: 12px 16px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-width: 200px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.blueprint-input {
+  color: #666;
+  font-style: italic;
+}
+
+.ip-input {
+  font-family: 'Courier New', monospace;
+}
+
+.search-button {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.search-button:hover:not(:disabled) {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.search-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Blueprints Section */
+.blueprints-section {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.blueprints-header {
+  background-color: #f8f9fa;
+  padding: 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.blueprints-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.blueprints-icon {
+  font-size: 1rem;
+}
+
+.blueprints-table-container {
+  overflow-x: auto;
+}
+
+.blueprints-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.blueprints-table th {
+  background-color: #495057;
+  color: white;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  border: none;
+}
+
+.blueprints-table th:first-child {
+  border-top-left-radius: 4px;
+}
+
+.blueprints-table th:last-child {
+  border-top-right-radius: 4px;
+}
+
+.blueprints-table td {
+  padding: 12px 16px;
+  border: none;
+  vertical-align: middle;
+}
+
+.blueprints-table tr.even-row {
+  background-color: #f8f9fa;
+}
+
+.blueprints-table tr.odd-row {
+  background-color: white;
+}
+
+.blueprints-table tr:hover {
+  background-color: #e3f2fd !important;
+}
+
+.blueprint-link {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.blueprint-link:hover {
+  color: #0056b3;
+  text-decoration: underline;
+}
+
+.blueprint-id {
+  font-family: 'Courier New', monospace;
+  color: #666;
+  font-size: 13px;
+}
+
+.blueprint-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-link {
+  background: none;
+  border: none;
+  color: #007bff;
+  text-decoration: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.action-link:hover {
+  background-color: #e3f2fd;
+  color: #0056b3;
+  text-decoration: underline;
+}
+
+.action-link:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.leafs-link {
+  color: #007bff;
+}
+
+.dump-link {
+  background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+  color: white;
+  border: 1px solid #17a2b8;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 500;
+  min-width: 60px;
+}
+
+.dump-link:hover:not(:disabled) {
+  background: linear-gradient(135deg, #138496 0%, #117a8b 100%);
+  border-color: #138496;
+  color: white;
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(23, 162, 184, 0.3);
+}
+
+.dump-link:disabled {
+  background: #6c757d;
+  border-color: #6c757d;
+  color: white;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.action-separator {
+  color: #666;
+  font-size: 12px;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .tools-content {
+    padding: 16px;
+  }
+  
+  .search-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .search-input {
+    min-width: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-section {
+    padding: 16px;
+  }
+  
+  .blueprints-header {
+    padding: 12px 16px;
+  }
+  
+  .blueprints-table th,
+  .blueprints-table td {
+    padding: 8px 12px;
+  }
+  
+  .blueprint-id {
+    font-size: 11px;
+    word-break: break-all;
+  }
+  
+  .blueprint-actions {
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .action-separator {
+    display: none;
+  }
+}
+
+/* System Info Display */
+.system-info-display {
+  background: linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%);
+  border: 2px solid #4caf50;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+}
+
+.system-info-display h4 {
+  margin: 0 0 12px 0;
+  color: #2e7d32;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.system-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item label {
+  font-weight: 600;
+  color: #2e7d32;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  color: #1b5e20;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  font-size: 0.9rem;
+}
+
+.apstra-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1976d2;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(25, 118, 210, 0.3);
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.apstra-link:hover {
+  background: rgba(25, 118, 210, 0.1);
+  border-color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.2);
+}
+
+.apstra-link:active {
+  transform: translateY(0);
+}
+
+/* Search Results Table */
+.search-results-table {
+  margin: 16px 0;
+}
+
+.search-results-table h4 {
+  margin: 0 0 12px 0;
+  color: #2e7d32;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.results-table-container {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow-x: auto;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.results-table thead {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.results-table th {
+  padding: 12px 8px;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #dee2e6;
+  white-space: nowrap;
+}
+
+.results-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.results-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.results-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.results-table td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.blueprint-cell,
+.pod-cell,
+.rack-cell,
+.system-cell,
+.interface-cell {
+  text-align: center;
+  width: 120px;
+}
+
+.ip-address {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #495057;
+  font-size: 0.85rem;
+  text-align: center;
+  background-color: #f8f9fa;
+  padding: 4px 8px;
+  border-radius: 3px;
+}
+
+.search-result {
+  text-align: center;
+  width: 100px;
+}
+
+.result-details-btn {
+  padding: 4px 8px;
+  background: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.result-details-btn:hover {
+  background: #1e7e34;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+  .system-info-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  
+  .info-item {
+    gap: 2px;
+  }
+  
+  .apstra-link {
+    justify-content: center;
+  }
+  
+  .results-table-container {
+    overflow-x: auto;
+  }
+  
+  .results-table {
+    min-width: 600px;
+  }
+  
+  .results-table th,
+  .results-table td {
+    padding: 8px 6px;
+    font-size: 0.85rem;
+  }
+  
+  .blueprint-cell,
+  .pod-cell,
+  .rack-cell,
+  .system-cell,
+  .interface-cell {
+    width: 90px;
+  }
+}

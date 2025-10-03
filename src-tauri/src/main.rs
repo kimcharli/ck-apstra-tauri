@@ -9,6 +9,7 @@ mod domains;
 
 use commands::*;
 use domains::excel::commands::*;
+use domains::apstra::commands::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -22,7 +23,7 @@ fn main() {
     env_logger::init();
     
     // Initialize API client state
-    let api_client_state: commands::apstra_api_handler::ApiClientState = 
+    let api_client_state: domains::apstra::commands::apstra_api_handler::ApiClientState = 
         Mutex::new(HashMap::new());
     
     // Initialize enhanced conversion state

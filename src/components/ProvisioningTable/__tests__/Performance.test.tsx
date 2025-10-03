@@ -4,7 +4,7 @@ import ProvisioningTable from '../ProvisioningTable';
 import { generateLargeTestDataset } from './fixtures/testData';
 
 // Mock dependencies
-vi.mock('../../../services/ApstraApiService', () => ({
+vi.mock('../../../domains/apstra/services/ApstraApiService', () => ({
   apstraApiService: {
     getHost: vi.fn(() => 'mock-host'),
     queryConnectivity: vi.fn(),

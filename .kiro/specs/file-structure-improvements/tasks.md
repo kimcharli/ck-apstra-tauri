@@ -54,27 +54,27 @@ This implementation plan converts the file structure improvement design into act
   - Update test imports and ensure all tests pass
   - _Requirements: 6.1, 6.2_
 
-- [ ] 3. Migrate Apstra domain to new structure
+- [x] 3. Migrate Apstra domain to new structure
   - Move Apstra-related components, services, and types to apstra domain
   - Reorganize API client and authentication logic
   - Update session management to follow domain patterns
   - _Requirements: 1.1, 2.1, 2.2_
 
-- [ ] 3.1 Migrate Apstra frontend components and services
+- [x] 3.1 Migrate Apstra frontend components and services
   - Move ApstraConfigManager, ToolsPage components to `src/domains/apstra/components/`
   - Move ApstraApiService to `src/domains/apstra/services/`
   - Move Apstra types and authentication context to `src/domains/apstra/`
   - Update all import statements and component references
   - _Requirements: 1.1, 2.1_
 
-- [ ] 3.2 Migrate Apstra backend services and commands
+- [x] 3.2 Migrate Apstra backend services and commands
   - Move apstra_api_service.rs to `src/domains/apstra/services/`
   - Move apstra_api_handler.rs and apstra_config_handler.rs to `src/domains/apstra/commands/`
   - Move Apstra models to `src/domains/apstra/models/`
   - Update command registration and service dependencies
   - _Requirements: 1.1, 2.1_
 
-- [ ] 3.3 Update Apstra domain tests and documentation
+- [x] 3.3 Update Apstra domain tests and documentation
   - Move Apstra-related tests to domain-specific directories
   - Create Apstra domain README with API integration patterns
   - Document authentication flow and session management
