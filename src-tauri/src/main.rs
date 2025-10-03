@@ -8,6 +8,7 @@ mod utils;
 mod domains;
 
 use commands::*;
+use domains::excel::commands::*;
 use std::collections::HashMap;
 use std::sync::Mutex;
 

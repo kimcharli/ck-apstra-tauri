@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::collections::HashMap;
 use ck_apstra_tauri::models::enhanced_conversion_map::EnhancedConversionMap;
-use ck_apstra_tauri::commands::data_parser::parse_excel_sheet;
+use ck_apstra_tauri::domains::excel::commands::parse_excel_sheet;
 
 /// Integration tests for Excel conversion functionality using real Excel fixtures
 #[cfg(test)]

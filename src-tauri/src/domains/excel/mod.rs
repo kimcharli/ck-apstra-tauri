@@ -1,21 +1,12 @@
-// Excel Domain Module
-// This module handles Excel file processing, parsing, and data extraction
+pub mod commands;
+pub mod services;
+pub mod models;
 
-// Commands (to be migrated)
-// pub mod commands;
+#[cfg(test)]
+pub mod tests;
 
-// Services (to be migrated)
-// pub mod services;
+pub use commands::*;
+pub use services::*;
+pub use models::*;
 
-// Models (to be migrated)
-// pub mod models;
-
-// Utils (to be migrated)
-// pub mod utils;
-
-// Re-exports (to be added during migration)
-// pub use services::*;
-// pub use models::*;
-
-// Placeholder constant for initial structure
 pub const EXCEL_DOMAIN: &str = "excel";

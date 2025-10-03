@@ -39,8 +39,8 @@ vi.mock('../components/NavigationHeader/NavigationHeader', () => ({
   }
 }));
 
-vi.mock('../components/FileUpload/FileUpload', () => ({
-  default: function MockFileUpload({ onSheetsLoaded }: any) {
+vi.mock('../domains/excel', () => ({
+  FileUpload: function MockFileUpload({ onSheetsLoaded }: any) {
     return (
       <div data-testid="file-upload">
         <button 
@@ -50,11 +50,8 @@ vi.mock('../components/FileUpload/FileUpload', () => ({
         </button>
       </div>
     );
-  }
-}));
-
-vi.mock('../components/SheetSelector/SheetSelector', () => ({
-  default: function MockSheetSelector({ sheets, onSheetSelect }: any) {
+  },
+  SheetSelector: function MockSheetSelector({ sheets, onSheetSelect }: any) {
     return (
       <div data-testid="sheet-selector">
         {sheets.map((sheet: string) => (

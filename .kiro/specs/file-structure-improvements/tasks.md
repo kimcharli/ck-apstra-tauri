@@ -28,27 +28,27 @@ This implementation plan converts the file structure improvement design into act
   - Define common interfaces that will be used across domains
   - _Requirements: 5.1, 5.2_
 
-- [ ] 2. Migrate Excel domain to new structure
+- [x] 2. Migrate Excel domain to new structure
   - Move Excel-related components, services, and types to excel domain
   - Update all imports and dependencies to use new paths
   - Ensure Excel processing functionality remains intact
   - _Requirements: 1.1, 2.1, 2.2_
 
-- [ ] 2.1 Migrate Excel frontend components and services
+- [x] 2.1 Migrate Excel frontend components and services
   - Move FileUpload, SheetSelector components to `src/domains/excel/components/`
   - Move Excel-related services to `src/domains/excel/services/`
   - Move Excel types to `src/domains/excel/types/`
   - Update all import statements throughout the codebase
   - _Requirements: 1.1, 2.1_
 
-- [ ] 2.2 Migrate Excel backend services and commands
+- [x] 2.2 Migrate Excel backend services and commands
   - Move excel_service.rs to `src/domains/excel/services/`
   - Move file_handler.rs and data_parser.rs commands to `src/domains/excel/commands/`
   - Move Excel-related models to `src/domains/excel/models/`
   - Update command registration in main.rs
   - _Requirements: 1.1, 2.1_
 
-- [ ] 2.3 Update Excel domain tests and documentation
+- [x] 2.3 Update Excel domain tests and documentation
   - Move Excel-related tests to domain-specific test directories
   - Create Excel domain README with API documentation
   - Update test imports and ensure all tests pass
