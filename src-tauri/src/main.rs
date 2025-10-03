@@ -5,6 +5,7 @@ mod commands;
 mod models;
 mod services;
 mod utils;
+mod domains;
 
 use commands::*;
 use std::collections::HashMap;

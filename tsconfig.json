@@ -14,6 +14,18 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path Mapping */
+    "baseUrl": ".",
+    "paths": {
+      "@domains/*": ["src/domains/*"],
+      "@domains": ["src/domains"],
+      "@excel/*": ["src/domains/excel/*"],
+      "@apstra/*": ["src/domains/apstra/*"],
+      "@conversion/*": ["src/domains/conversion/*"],
+      "@provisioning/*": ["src/domains/provisioning/*"],
+      "@shared/*": ["src/domains/shared/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
