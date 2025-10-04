@@ -1,7 +1,7 @@
 use tauri::State;
 use std::sync::Mutex;
 use std::collections::HashMap;
-use crate::services::enhanced_conversion_service::EnhancedConversionService;
+use crate::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
 use crate::domains::conversion::services::transformation_engine::TransformationEngine;
 use crate::models::enhanced_conversion_map::{
     EnhancedConversionMap, FieldDefinition, HeaderConversionResult, 

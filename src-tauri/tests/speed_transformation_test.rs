@@ -1,4 +1,4 @@
-use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+use ck_apstra_tauri::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
 use std::collections::HashMap;
 
 #[test]

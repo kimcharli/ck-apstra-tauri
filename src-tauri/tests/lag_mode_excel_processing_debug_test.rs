@@ -1,5 +1,5 @@
 use ck_apstra_tauri::domains::excel::commands::parse_excel_sheet;
-use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+use ck_apstra_tauri::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
 use calamine::{Reader, open_workbook, Xlsx};
 use std::collections::HashMap;
 

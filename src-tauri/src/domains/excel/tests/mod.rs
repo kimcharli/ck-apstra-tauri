@@ -5,7 +5,7 @@
 mod excel_processing_tests {
     use super::super::commands::*;
     use super::super::services::*;
-    use crate::services::enhanced_conversion_service::EnhancedConversionService;
+    use crate::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
     use std::collections::HashMap;
 
     #[tokio::test]

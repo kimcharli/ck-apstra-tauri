@@ -19,7 +19,7 @@ mod excel_integration_tests {
 
     fn create_enhanced_conversion_map_for_test() -> EnhancedConversionMap {
         // Use the actual default enhanced conversion map
-        use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+        use ck_apstra_tauri::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
         EnhancedConversionService::load_default_enhanced_conversion_map().unwrap()
     }
 
@@ -189,7 +189,7 @@ mod excel_integration_tests {
                 let conversion_map = create_enhanced_conversion_map_for_test();
                 
                 // Test the enhanced conversion system
-                use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+                use ck_apstra_tauri::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
                 let service = EnhancedConversionService::new();
                 
                 println!("INPUT HEADERS:");

@@ -27,7 +27,7 @@ fn main() {
         Mutex::new(HashMap::new());
     
     // Initialize enhanced conversion state
-    let enhanced_conversion_state = commands::enhanced_conversion_handler::EnhancedConversionState::default();
+    let enhanced_conversion_state = domains::conversion::commands::enhanced_conversion_handler::EnhancedConversionState::default();
     
     tauri::Builder::default()
         .manage(api_client_state)

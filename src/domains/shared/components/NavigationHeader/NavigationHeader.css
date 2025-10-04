@@ -1,0 +1,291 @@
+.navigation-header {
+  position: sticky;
+  top: 0;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  z-index: 1001;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.nav-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.nav-title-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-button {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.back-button:hover {
+  background-color: #f8f9fa;
+  border-color: #999;
+  color: #333;
+}
+
+.nav-title-section h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  color: white;
+}
+
+.nav-btn:nth-child(1) {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  transition: all 0.3s ease;
+  animation: pulse-uncomfortable 2s infinite;
+}
+
+@keyframes pulse-uncomfortable {
+  0% {
+    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(220, 53, 69, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+  }
+}
+
+.nav-btn:nth-child(1):hover {
+  background: linear-gradient(135deg, #c82333 0%, #bd2130 100%);
+  transform: scale(1.05);
+}
+
+.nav-btn:nth-child(1).active {
+  background: linear-gradient(135deg, #bd2130 0%, #a71e2a 100%);
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.4);
+}
+
+/* Authenticated state for Apstra Connection button */
+.nav-btn:nth-child(1).authenticated {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+  position: relative;
+  overflow: hidden;
+  animation: none; /* Remove the uncomfortable pulse */
+}
+
+.nav-btn:nth-child(1).authenticated::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: shimmer-nav 2s infinite;
+}
+
+@keyframes shimmer-nav {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+.nav-btn:nth-child(1).authenticated:hover {
+  background: linear-gradient(135deg, #1e7e34 0%, #17a2b8 100%);
+  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+  transform: translateY(-1px);
+}
+
+.nav-btn:nth-child(1).authenticated.active {
+  background: linear-gradient(135deg, #155724 0%, #138496 100%);
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.4);
+}
+
+.nav-btn:nth-child(2) {
+  background-color: #007bff;
+}
+
+.nav-btn:nth-child(2):hover {
+  background-color: #0056b3;
+}
+
+.nav-btn:nth-child(2).active {
+  background-color: #004085;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.3);
+}
+
+.nav-btn:nth-child(3) {
+  background-color: #dc3545;
+  font-weight: 600;
+}
+
+.nav-btn:nth-child(3):hover {
+  background-color: #c82333;
+}
+
+.nav-btn:nth-child(3).active {
+  background-color: #a71e2a;
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.3);
+}
+
+.nav-btn:nth-child(4) {
+  background-color: #6f42c1;
+}
+
+.nav-btn:nth-child(4):hover {
+  background-color: #59359a;
+}
+
+.nav-btn:nth-child(4).active {
+  background-color: #4c2a85;
+  box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.3);
+}
+
+/* Log Download Button */
+.log-download-btn {
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  padding: 8px;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.3s;
+  margin-right: 8px;
+}
+
+.log-download-btn:hover:not(:disabled) {
+  background-color: #138496;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(23, 162, 184, 0.3);
+}
+
+.log-download-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Connection Status Button */
+.connection-status {
+  padding: 8px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.3s;
+  color: white;
+  background-color: #6c757d;
+}
+
+.connection-status:disabled {
+  cursor: not-allowed;
+}
+
+.connection-status.connection-alive {
+  background-color: #28a745;
+  box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+  animation: pulse 2s infinite;
+}
+
+.connection-status.connection-testing {
+  background-color: #ffc107;
+  animation: spin 1s linear infinite;
+}
+
+.connection-status:not(.connection-alive):not(.connection-testing) {
+  background-color: #dc3545;
+  box-shadow: 0 0 10px rgba(220, 53, 69, 0.5);
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .nav-content {
+    padding: 12px 16px;
+  }
+  
+  .nav-buttons {
+    gap: 8px;
+  }
+  
+  .nav-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .nav-content {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .nav-title-section h1 {
+    font-size: 1.3rem;
+  }
+  
+  .nav-buttons {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .nav-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+}

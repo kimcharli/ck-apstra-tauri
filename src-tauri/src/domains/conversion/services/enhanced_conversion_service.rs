@@ -26,7 +26,7 @@ impl EnhancedConversionService {
     }
 
     pub fn load_default_enhanced_conversion_map() -> Result<EnhancedConversionMap, String> {
-        let enhanced_map_content = include_str!("../../../data/default_enhanced_conversion_map.json");
+        let enhanced_map_content = include_str!("../../../../../data/default_enhanced_conversion_map.json");
         
         let enhanced_map: EnhancedConversionMap = serde_json::from_str(enhanced_map_content)
             .map_err(|e| format!("Failed to parse default enhanced conversion map: {}", e))?;

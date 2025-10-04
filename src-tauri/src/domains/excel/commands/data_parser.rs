@@ -1,7 +1,7 @@
 use tauri::command;
 use crate::domains::shared::models::api_contracts::NetworkConfigRow;
 use crate::models::enhanced_conversion_map::EnhancedConversionMap;
-use crate::services::enhanced_conversion_service::EnhancedConversionService;
+use crate::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
 use calamine::{Reader, Xlsx, open_workbook, Range, Data, DataType};
 use std::collections::HashMap;
 

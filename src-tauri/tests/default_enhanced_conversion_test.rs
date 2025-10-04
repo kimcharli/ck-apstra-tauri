@@ -1,5 +1,5 @@
 use std::time::Instant;
-use ck_apstra_tauri::services::enhanced_conversion_service::EnhancedConversionService;
+use ck_apstra_tauri::domains::conversion::services::enhanced_conversion_service::EnhancedConversionService;
 
 #[test]
 fn test_default_enhanced_conversion_map_loading() {
